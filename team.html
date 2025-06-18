@@ -9,7 +9,7 @@
   
 </head>
 <body>
-    <nav>
+    <nav id="header">
         <div class="logo">
             <a href="index.html" style="display: flex; align-items: center; text-decoration: none;">
               <img src="NEPPlogo.png" alt="NEPP Logo" style="height: 40px; margin-right: 10px;">
@@ -26,6 +26,27 @@
           <li><a href="contact.html">CONTACT</a></li>
         </ul>
       </nav>
+      <br>
+  <br>
+  <button
+    style="font-size: 50px; margin-left: 90%; margin-top: 5%; color: white; background-color:#071F36; border: none; display: block;"
+    onclick="closeNav()" id="closeNav">&uarr;</button>
+  <button
+    style="font-size: 50px; margin-left: 90%; margin-top: 5%; color: white; background-color:#071F36; border: none; display: none;"
+    onclick="openNav()" id="openNav">&#9776;</button>
+  <script>
+    function openNav() {
+      document.getElementById("header").style.height = "100px";
+      document.getElementById("closeNav").style.display = "block";
+      document.getElementById("openNav").style.display = "none";
+    }
+
+    function closeNav() {
+      document.getElementById("header").style.height = "0";
+      document.getElementById("closeNav").style.display = "none";
+      document.getElementById("openNav").style.display = "block";
+    }
+  </script>
       <br>
       <br>
       <br>
@@ -64,7 +85,7 @@
                 <img src="kevin.png" alt="kevin">
                 <h2>Kevin Wang</h2>
                 <p>MUN Captain</p>
-                <p><a href="mailto:"></a></p>
+                <p><a href="mailto:kw1681884@gmail.com">kw1681884@gmail.com</a></p>
             </div>
         </div>
         <div class="card">
@@ -79,16 +100,28 @@
     <br>
     <br>
     <br>
-    <!--Devs section
-    <section style="background-color: #0C2A45;">
-        <h2 style="text-align: center;">Special thanks to:</h2>
-        <ul>
-            <li>Ayan Prasad</li>
-            <li>Kevin Zhao</li>
+    <!--Devs section-->
+  <section style="background-color: #0C2A45;">
+    <h2 style="text-align: center;">Special thanks to our web developers:</h2>
+      <div id="demo" style="width: 200px; font-size: 25px; text-align: center; margin-left: 43%;">
+      </div>
+  </section>
 
-        </ul>
+  <script>
+    var i = 0;
+    var txt = 'Ayan Prasad Kevin Zhao Dainna Park Daniel Tikhonov Gabe Amare Jaden Ryu';
+    var speed = 50;
 
-    </section>-->
+    function typeWriter() {
+      if (i < txt.length) {
+        document.getElementById("demo").innerHTML += txt.charAt(i);
+        i++;
+        setTimeout(typeWriter, speed);
+      }
+    }
+    typeWriter()
+  </script>
+
       
 
   
