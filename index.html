@@ -24,6 +24,9 @@
           <li><a>|</a></li>
           <li><a href="team.html">TEAM</a></li>
           <li><a href="contact.html">CONTACT</a></li>
+          <li><a href="login.html" id="login-link">LOGIN</a></li>
+          <li><a href="#" id="logout-link" style="display: none;">LOGOUT</a></li>
+          <li><a href="profile.html" id="profile-link" style="display: none;">PROFILE</a></li>
         </ul>
       </nav>
       
@@ -62,5 +65,10 @@
     setInterval(showNextSlide, 4000); // every 4 seconds
   </script>
   
+  <!-- Firebase Authentication -->
+  <script type="module">
+    import { setupAuth } from './auth.js';
+    setupAuth();
+  </script>
 </body>
 </html>

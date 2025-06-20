@@ -1,0 +1,14 @@
+{
+  "name": "nepp-website",
+  "version": "1.0.0",
+  "description": "NEPP Website with Firebase Authentication",
+  "main": "index.html",
+  "scripts": {
+    "start": "serve .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "firebase": "^10.7.1",
+    "serve": "^14.2.1"
+  }
+}
