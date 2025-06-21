@@ -57,6 +57,9 @@
       <li class="text-yellow">|</li>
       <li><a href="team.html" class="hover:text-yellow transition">TEAM</a></li>
       <li><a href="contact.html" class="hover:text-yellow transition">CONTACT</a></li>
+      <li><a href="login.html" id="login-link" class="hover:text-yellow transition">LOGIN</a></li>
+      <li><a href="#" id="logout-link" style="display: none;" class="hover:text-yellow transition">LOGOUT</a></li>
+      <li><a href="profile.html" id="profile-link" style="display: none;" class="hover:text-yellow transition">PROFILE</a></li>
     </ul>
   </nav>
 
@@ -117,6 +120,13 @@
       <a href="https://www.instagram.com/neppadvisors/" target="_blank" class="underline text-yellow">Instagram</a></p>
     <p>© 2025 NEPP | A Non-Profit Organization</p>
   </footer>
+
+
+  <!-- Firebase Authentication -->
+  <script type="module">
+    import { setupAuth } from './auth.js';
+    setupAuth();
+  </script>
 
 </body>
 </html>
