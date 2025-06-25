@@ -6,57 +6,61 @@
   <title>NEPP | Login</title>
   <link rel="stylesheet" href="styles.css">
   <style>
+    body {
+      background-color: #0c1930;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
     .auth-container {
-      max-width: 400px;
+      max-width: 450px;
       margin: 80px auto;
-      padding: 30px;
-      border-radius: 12px;
-      box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 5px 30px rgba(0, 0, 0, 0.2);
       background-color: white;
-      border-top: 5px solid #FFD700;
       color: #333;
     }
     
     .form-group {
-      margin-bottom: 22px;
+      margin-bottom: 28px;
     }
     
     .form-group label {
-      display: block;
-      margin-bottom: 10px;
-      font-weight: bold;
-      color: #333;
-      font-size: 17px;
+      display: none;
     }
     
     .form-group input {
       width: 100%;
-      padding: 12px 15px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
+      padding: 16px;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
       font-size: 16px;
-      transition: border-color 0.3s ease;
+      transition: all 0.3s ease;
+      background-color: #fff;
     }
     
     .form-group input:focus {
       outline: none;
-      border-color: var(--accent-color);
-      box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+      border-color: #FFD700;
+      box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.2);
+    }
+    
+    .form-group input::placeholder {
+      color: #aaa;
     }
     
     .auth-btn {
       display: block;
       width: 100%;
-      max-width: 300px;
-      padding: 14px;
+      padding: 16px;
       background-color: #FFD700;
-      color: #001F3F;
+      color: #0c1930;
       border: none;
       border-radius: 8px;
       font-size: 18px;
       font-weight: bold;
       cursor: pointer;
-      margin: 30px auto 0;
+      margin: 35px 0 15px;
       text-align: center;
       transition: all 0.3s ease;
       box-shadow: 0 2px 5px rgba(0,0,0,0.1);
@@ -64,28 +68,29 @@
     
     .auth-btn:hover {
       opacity: 0.95;
-      transform: translateY(-3px);
+      transform: translateY(-2px);
       box-shadow: 0 6px 12px rgba(0,0,0,0.15);
     }
     
     .auth-links {
       text-align: center;
       margin-top: 25px;
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
+    }
+    
+    .auth-links p {
+      color: #333;
     }
     
     .auth-links a {
-      color: var(--accent-color);
+      color: #FFD700;
       text-decoration: none;
-      font-weight: 500;
+      font-weight: 600;
       transition: all 0.2s ease;
+      font-size: 16px;
     }
     
     .auth-links a:hover {
       text-decoration: underline;
-      color: #0056b3;
     }
     
     .auth-message {
@@ -93,63 +98,65 @@
       margin-top: 15px;
       color: #ff3860;
       display: none;
+      padding: 10px;
+      border-radius: 6px;
+    }
+    
+    nav, .footer {
+      display: none;
     }
   </style>
 </head>
 <body>
-    <nav>
-        <div class="logo">
-            <a href="index.html" style="display: flex; align-items: center; text-decoration: none;">
-              <img src="NEPPlogo.png" alt="NEPP Logo" style="height: 40px; margin-right: 10px;">
-              <span style="font-size: 1.5rem; font-weight: bold; color: var(--accent-color);">NEPP</span>
-            </a>
-          </div>
-        <ul>
-          <li><a href="mun.html">MUN</a></li>
-          <li><a href="tsa.html">TSA</a></li>
-          <li><a href="scio.html">SCIO</a></li>
-          <li><a href="debate.html">DEBATE</a></li>
-          <li><a>|</a></li>
-          <li><a href="team.html">TEAM</a></li>
-          <li><a href="contact.html">CONTACT</a></li>
-          <li><a href="login.html" class="active">LOGIN</a></li>
-        </ul>
-      </nav>
-      
   <div class="auth-container">
-    <h2 style="text-align: center; margin-bottom: 20px; color: #001F3F; font-size: 28px; font-weight: 700;">Welcome Back! 👋</h2>
-    <p style="text-align: center; color: #666; margin-bottom: 25px; font-size: 16px;">Enter your credentials to access your NEPP account</p>
+    <div style="text-align: center; margin-bottom: 40px;">
+      <h2 style="font-size: 32px; color: #0c1930; margin-bottom: 10px;">Welcome Back! 👋</h2>
+      <p style="color: #666; font-size: 16px; margin-bottom: 0;">Enter your credentials to access your NEPP account</p>
+    </div>
+    
     <div id="auth-message" class="auth-message"></div>
     
-         <form id="login-form">
-       <div class="form-group">
-         <label for="email">Email Address</label>
-         <input type="email" id="email" placeholder="Enter your email" required>
-       </div>
-       
-       <div class="form-group">
-         <label for="password">Password</label>
-         <input type="password" id="password" placeholder="Enter your password" required>
-       </div>
-       
-       <button type="submit" class="auth-btn">Login</button>
-     </form>
+    <form id="login-form">
+      <div class="form-group">
+        <label for="email">Email Address</label>
+        <input type="email" id="email" placeholder="Enter your email" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="Enter your password" required>
+      </div>
+      
+      <button type="submit" class="auth-btn">Login</button>
+    </form>
     
     <div class="auth-links">
-      <p style="color: #333;">Don't have an account? <a href="signup.html" style="color: #FFD700; font-weight: bold;">Sign Up</a></p>
-      <p style="color: #333;"><a href="#" id="forgot-password" style="color: #FFD700;">Forgot Password?</a></p>
+      <p style="color: #333;">Don't have an account? <a href="signup.html">Sign Up</a></p>
+      <p style="color: #333; margin-top: 15px;"><a href="#" id="forgot-password">Forgot Password?</a></p>
     </div>
   </div>
 
-  <footer class="footer">
-    <p>Contact us: <a href="mailto:nepp.advisors@gmail.com">email</a> | <a href="https://www.instagram.com/neppadvisors/" target="_blank">Instagram</a></p>
-    <p>© 2025 NEPP | A Non-Profit Organization</p>
-  </footer>
-  
   <!-- Firebase SDK -->
-  <script type="module">
-    import { auth } from './firebase.js';
-    import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-analytics-compat.js"></script>
+  
+  <script>
+    // Your web app's Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyDVzvRC9lwlJGRLzsj1S-o-Y-b1DtmD9TQ",
+      authDomain: "nepp-82074.firebaseapp.com",
+      projectId: "nepp-82074",
+      storageBucket: "nepp-82074.firebasestorage.app",
+      messagingSenderId: "390060926966",
+      appId: "1:390060926966:web:dd7a95fc553a86bdd2c9d7",
+      measurementId: "G-QSFQKZDETN"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    firebase.analytics();
+    const auth = firebase.auth();
     
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -160,11 +167,27 @@
       
       try {
         authMessage.style.display = 'none';
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        
+        // Show a loading message
+        authMessage.textContent = 'Logging in...';
+        authMessage.style.color = '#666';
+        authMessage.style.display = 'block';
+        
+        const userCredential = await auth.signInWithEmailAndPassword(email, password);
+        console.log('Login successful', userCredential.user);
+        
         // Successful login
-        window.location.href = 'index.html'; // Redirect to home page
+        authMessage.textContent = 'Login successful! Redirecting...';
+        authMessage.style.color = 'green';
+        
+        // Redirect after a short delay
+        setTimeout(() => {
+          window.location.href = 'index.html'; // Redirect to home page
+        }, 1000);
       } catch (error) {
+        console.error('Login error:', error);
         authMessage.textContent = error.message;
+        authMessage.style.color = '#ff3860';
         authMessage.style.display = 'block';
       }
     });
@@ -182,11 +205,12 @@
       }
       
       try {
-        await sendPasswordResetEmail(auth, email);
+        await auth.sendPasswordResetEmail(email);
         authMessage.textContent = 'Password reset email sent!';
         authMessage.style.color = 'green';
         authMessage.style.display = 'block';
       } catch (error) {
+        console.error('Password reset error:', error);
         authMessage.textContent = error.message;
         authMessage.style.color = '#ff3860';
         authMessage.style.display = 'block';

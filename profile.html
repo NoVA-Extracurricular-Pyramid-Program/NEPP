@@ -144,9 +144,26 @@
   </footer>
   
   <!-- Firebase SDK -->
-  <script type="module">
-    import { auth } from './firebase.js';
-    import { onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-analytics-compat.js"></script>
+  
+  <script>
+    // Your web app's Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyDVzvRC9lwlJGRLzsj1S-o-Y-b1DtmD9TQ",
+      authDomain: "nepp-82074.firebaseapp.com",
+      projectId: "nepp-82074",
+      storageBucket: "nepp-82074.firebasestorage.app",
+      messagingSenderId: "390060926966",
+      appId: "1:390060926966:web:dd7a95fc553a86bdd2c9d7",
+      measurementId: "G-QSFQKZDETN"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    firebase.analytics();
+    const auth = firebase.auth();
     
     const loginLink = document.getElementById('login-link');
     const logoutLink = document.getElementById('logout-link');
@@ -155,9 +172,10 @@
     const profileContent = document.getElementById('profile-content');
     
     // Handle authentication state changes
-    onAuthStateChanged(auth, (user) => {
+    auth.onAuthStateChanged(function(user) {
       if (user) {
         // User is signed in
+        console.log('User is signed in:', user.email);
         loginLink.style.display = 'none';
         logoutLink.style.display = 'block';
         profileLink.style.display = 'block';
@@ -179,6 +197,7 @@
         document.getElementById('join-date').textContent = joinDate.toLocaleDateString();
       } else {
         // User is signed out
+        console.log('User is signed out');
         loginLink.style.display = 'block';
         logoutLink.style.display = 'none';
         profileLink.style.display = 'none';
@@ -190,21 +209,37 @@
     });
     
     // Handle change password
-    document.getElementById('change-password-btn').addEventListener('click', async () => {
+    document.getElementById('change-password-btn').addEventListener('click', function() {
       const user = auth.currentUser;
       if (user) {
         try {
-          await sendPasswordResetEmail(auth, user.email);
-          alert('Password reset email sent! Check your inbox to reset your password.');
+          auth.sendPasswordResetEmail(user.email).then(function() {
+            alert('Password reset email sent! Check your inbox to reset your password.');
+          }).catch(function(error) {
+            console.error('Password reset error:', error);
+            alert('Error: ' + error.message);
+          });
         } catch (error) {
+          console.error('Password reset error:', error);
           alert('Error: ' + error.message);
         }
       }
     });
     
     // Handle update profile
-    document.getElementById('update-profile-btn').addEventListener('click', () => {
+    document.getElementById('update-profile-btn').addEventListener('click', function() {
       alert('Profile update functionality coming soon!');
+    });
+    
+    // Handle logout
+    logoutLink.addEventListener('click', function(e) {
+      e.preventDefault();
+      auth.signOut().then(function() {
+        console.log('User signed out');
+        window.location.href = 'index.html';
+      }).catch(function(error) {
+        console.error('Sign out error:', error);
+      });
     });
   </script>
 </body>
