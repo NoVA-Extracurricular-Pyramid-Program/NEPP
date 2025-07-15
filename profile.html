@@ -104,31 +104,73 @@
           <li><a href="profile.html" id="profile-link" style="display: none;" class="active">PROFILE</a></li>
         </ul>
       </nav>
-      
-  <div id="auth-required" class="auth-message" style="display: none;">
-    <p>You need to be logged in to view this page. <a href="login.html">Login here</a></p>
+  <br>
+  <br>
+  <br>
+  <br>
+  <div id="account" style="display: inline-flex;">
+    <div id="signup"
+      style="background-color: white; width: 200px; height: 300px; margin-left: 90%; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);">
+      <h2 style="text-align: center; color: black;">Sign Up</h2>
+      <form action="">
+        <label for="uname">Username</label>
+        <br>
+        <input type="text" id="uname" name="uname" placeholder="Enter your username" required>
+        <label for="email">Email</label>
+        <br>
+        <input type="email" id="email" name="email" placeholder="Enter your email" required>
+        <label for="password">Password</label>
+        <br>
+        <input type="password" id="password" name="password" placeholder="Enter your password" required>
+        <br>
+        <br>
+        <button type="submit" class="btn" style="width: 100%; padding: 20px; font-size: large;" onclick="signUp()">Sign
+          Up</button>
+  
+      </form>
+    </div>
+    <div id="login"
+      style="background-color: white; width: 200px; height: 300px; margin-left: 43%; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);">
+      <h2 style="text-align: center; color: black;">Login</h2>
+      <form action="">
+        <label for="uname">Username</label>
+        <br>
+        <input type="text" id="logname" name="uname" placeholder="Enter your username" required>
+        <label for="password">Password</label>
+        <br>
+        <input type="password" id="logpass" name="password" placeholder="Enter your password" required>
+        <br>
+        <br>
+        <button type="submit" class="btn" style="width: 100%; padding: 20px; font-size: large; margin-top: 50px;" onclick="login()">Login</button>
+      </form>
+    </div>
   </div>
+
+
+  <!--<div id="auth-required" class="auth-message" style="display: none;">
+    <p>You need to be logged in to view this page. <a href="login.html">Login here</a></p>
+  </div>-->
   
   <div id="profile-content" class="profile-container" style="display: none;">
     <div class="profile-header">
       <div class="profile-avatar" id="avatar-initial"></div>
+
       <div class="profile-info">
-        <h1 id="user-name">Loading...</h1>
-        <p id="user-email">loading@example.com</p>
-        <p>Member since <span id="join-date">Loading...</span></p>
+        <h1 id="user-name" style="color: black;"></h1>
+        <p id="user-email"></p>
       </div>
     </div>
     
     <div class="profile-section">
       <h2>Account Settings</h2>
       <button class="btn" id="change-password-btn">Change Password</button>
-      <button class="btn btn-secondary" id="update-profile-btn">Update Profile</button>
+      <button class="btn btn-secondary" id="update-profile-btn" onclick="updatePic()">Update Profile</button>
     </div>
     
     <div class="profile-section">
-      <h2>My Activities</h2>
-      <p>You haven't registered for any activities yet.</p>
-      <p>Check out our programs:</p>
+      <h2  style="color: black;">My Activities</h2>
+      <p style="color: black;">You haven't registered for any activities yet.</p>
+      <p style="color: black;">Check out our programs:</p>
       <ul>
         <li><a href="mun.html">Model United Nations</a></li>
         <li><a href="tsa.html">Technology Student Association</a></li>
@@ -137,6 +179,37 @@
       </ul>
     </div>
   </div>
+
+  <script>
+    var uname = toString(document.getElementById("uname").value);
+    var email = toString(document.getElementById("email").value);
+    var password = toString(document.getElementById("password").value);
+    //These are used to check if the login credentials are correct
+    var logname = toString(document.getElementById("logname").value);
+    var logpass = toString(document.getElementById("logpass").value);
+    //This mimics backend functionality for signup and login
+    //These are used to signup
+    function signUp() {
+      document.getElementById("user-name").innerHTML = uname;
+      document.getElementById("user-email").innerHTML = email;
+      document.getElementById("signup").style.display = "none";
+      document.getElementById("login").style.display = "none";
+      document.getElementById("profile-content").style.display = "block";
+    }
+    //This is to check if login is correct
+    function login() {
+      if (logname !== uname || logpass !== password) {
+        alert("Invalid username or password");
+        return;
+      }
+      document.getElementById("user-name").innerHTML = uname;
+      document.getElementById("user-email").innerHTML = email;
+      document.getElementById("signup").style.display = "none";
+      document.getElementById("login").style.display = "none";
+      document.getElementById("profile-content").style.display = "block";
+    }
+  </script>
+
 
   <footer class="footer">
     <p>Contact us: <a href="mailto:nepp.advisors@gmail.com">email</a> | <a href="https://www.instagram.com/neppadvisors/" target="_blank">Instagram</a></p>
