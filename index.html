@@ -65,10 +65,57 @@
     setInterval(showNextSlide, 4000); // every 4 seconds
   </script>
   
-  <!-- Firebase Authentication -->
-  <script type="module">
-    import { setupAuth } from './auth.js';
-    setupAuth();
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-analytics-compat.js"></script>
+  
+  <script>
+    // Your web app's Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyDVzvRC9lwlJGRLzsj1S-o-Y-b1DtmD9TQ",
+      authDomain: "nepp-82074.firebaseapp.com",
+      projectId: "nepp-82074",
+      storageBucket: "nepp-82074.firebasestorage.app",
+      messagingSenderId: "390060926966",
+      appId: "1:390060926966:web:dd7a95fc553a86bdd2c9d7",
+      measurementId: "G-QSFQKZDETN"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    firebase.analytics();
+    
+    // Handle authentication state
+    const loginLink = document.getElementById('login-link');
+    const logoutLink = document.getElementById('logout-link');
+    const profileLink = document.getElementById('profile-link');
+    
+    firebase.auth().onAuthStateChanged(function(user) {
+      if (user) {
+        // User is signed in
+        console.log('User is signed in:', user.email);
+        loginLink.style.display = 'none';
+        logoutLink.style.display = 'block';
+        profileLink.style.display = 'block';
+      } else {
+        // User is signed out
+        console.log('User is signed out');
+        loginLink.style.display = 'block';
+        logoutLink.style.display = 'none';
+        profileLink.style.display = 'none';
+      }
+    });
+    
+    // Handle logout
+    logoutLink.addEventListener('click', function(e) {
+      e.preventDefault();
+      firebase.auth().signOut().then(function() {
+        console.log('User signed out');
+      }).catch(function(error) {
+        console.error('Sign out error:', error);
+      });
+    });
   </script>
 </body>
 </html>
