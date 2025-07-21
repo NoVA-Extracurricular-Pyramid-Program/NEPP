@@ -1,0 +1,112 @@
+.dashboard-root {
+  width: 100%;
+  min-height: 100vh;
+  background: #101622;
+  padding: 0;
+}
+
+.dashboard-header-row {
+  display: flex;
+  align-items: flex-start;
+  margin-top: 54px;
+  margin-bottom: 38px;
+  margin-left: 72px;
+  margin-right: 90px;
+  justify-content: flex-start;
+  gap: 38px;
+}
+
+.dashboard-title {
+  font-size: 3.3rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 1px;
+  margin: 0;
+  text-align: left;
+  flex: none;
+}
+
+.dashboard-profile-icon {
+  margin-left: auto;
+  margin-right: 42px;
+  margin-top: 5px;
+}
+
+.dashboard-main-widgets {
+  display: flex;
+  flex-direction: row;
+  gap: 44px;
+  padding: 0 72px;
+}
+
+.dashboard-announcements {
+  width: 380px;
+  min-width: 320px;
+  max-width: 400px;
+  min-height: 220px;
+  max-height: 260px;
+  border-radius: 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.ann-body {
+  font-size: 1.13rem;
+  margin-bottom: 12px;
+  margin-top: 10px;
+  color: #DFDFDF;
+  letter-spacing: .01em;
+}
+.ann-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.07rem;
+  color: #FFD600;
+  opacity: 0.9;
+  margin-bottom: 10px;
+}
+.ann-author-icon {
+  display: flex;
+}
+
+.dashboard-side-widgets {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  min-width: 350px;
+  width: 440px;
+}
+
+.dashboard-forms {
+  min-height: 100px;
+  margin-bottom: 12px;
+}
+
+.forms-body {
+  margin: 12px 0 0 0;
+  font-size: 1.1rem;
+  color: #DFDFDF;
+  padding: 10px 0 10px 0;
+  background: #1b2232;
+  border-radius: 14px;
+  padding-left: 18px;
+}
+
+.dashboard-calendar {
+  min-height: 290px;
+}
+
+.widget-card {
+  background: #121828;
+  border: 1.2px solid #232b36;
+  border-radius: 22px;
+  padding: 28px 30px;
+  box-shadow: 0 2px 8px 0 rgba(30,35,48,0.04);
+}
+.widget-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 18px;
+}
