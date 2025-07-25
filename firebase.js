@@ -1,23 +1,17 @@
-// Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
 import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyDVzvRC9lwlJGRLzsj1S-o-Y-b1DtmD9TQ",
-  authDomain: "nepp-82074.firebaseapp.com",
-  projectId: "nepp-82074",
-  storageBucket: "nepp-82074.firebasestorage.app",
-  messagingSenderId: "390060926966",
-  appId: "1:390060926966:web:dd7a95fc553a86bdd2c9d7",
-  measurementId: "G-QSFQKZDETN"
+  apiKey: "AIzaSyBi1qbmteDz_WwhyHLndlrvyCZE1MICQo8",
+  authDomain: "nepp-75d86.firebaseapp.com",
+  projectId: "nepp-75d86",
+  storageBucket: "nepp-75d86.firebasestorage.app",
+  messagingSenderId: "881241080543",
+  appId: "1:881241080543:web:3344a88c6f191602905f6a",
+  measurementId: "G-JK31WLT6TX"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-const auth = getAuth(app);
-
-export { app, analytics, auth }; 
+export const auth = getAuth(app);
+export const db = getFirestore(app);
