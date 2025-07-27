@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dashboard - NEPP</title>
+  <link rel="stylesheet" href="styles2.css" />
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="logo">NEPP</div>
+    <ul>
+      <li class="active"><a href="dashboard.html">Dashboard</a></li>
+      <li><a href="groups.html">Groups</a></li>
+      <li><a href="resources.html">Resources</a></li>
+      <li><a href="quizzes.html">Quizzes</a></li>
+      <li><a href="events.html">Events</a></li>
+      <li><a href="announcements.html">Announcements</a></li>
+    </ul>
+    <div class="profile">
+      <span class="name">Anjay Kannan</span>
+      <small>Verified NEPP User</small>
+      <div class="verified-badge">✓</div>
+    </div>
+  </nav>
+
+  <main class="content">
+    <header class="page-header">
+      <h1>Welcome NEPP User</h1>
+      <div class="user-icon"></div>
+    </header>
+    <section class="dashboard-sections">
+      <div class="panel announcements">
+        <h2>Announcements</h2>
+        <p>Hi,<br>
+        This is a Sample Message.<br>
+        Here Team managers can post announcements to the team and all team members can see it.</p>
+        <div class="author">
+          <span class="avatar"></span>
+          <span class="author-name">Shayaan Dutt | Position</span>
+        </div>
+      </div>
+      <!-- Updated Forms Section -->
+      <div class="panel forms-section">
+        <h2>Your Forms</h2>
+        <ul class="forms-list">
+          <li class="form-item">
+            <span class="form-name">Form Name</span><br>
+            <span class="form-date">Due: 6/14</span><br>
+            <span class="form-user">Assigned by: Ravin Singh</span>
+          </li>
+          <!-- More <li class="form-item"> for additional forms -->
+        </ul>
+      </div>
+      <div class="panel calendar">
+        <h2>Date: Upcoming Event</h2>
+        <div class="calendar-widget">
+          <div class="cal-header">
+            <button>&lt;</button>
+            <span>April 2024</span>
+            <button>&gt;</button>
+          </div>
+          <div class="calendar-grid">
+            <!-- generate days 1–30; highlight 12 -->
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

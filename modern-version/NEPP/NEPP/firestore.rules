@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users can read and write their own user document
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      // Allow users to read other users' basic info for group functionality
+      allow read: if request.auth != null;
+    }
+    
+    // Groups - more permissive for better functionality
+    match /groups/{groupId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.createdBy;
+      allow update, delete: if request.auth != null && 
+        (request.auth.uid == resource.data.createdBy ||
+         request.auth.uid == resource.data.ownerId ||
+         request.auth.uid in resource.data.members);
+    }
+    
+    // Forms - simplified rules for better query support
+    match /forms/{formId} {
+      // Allow authenticated users to read forms (will filter in client)
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.createdBy;
+      allow update, delete: if request.auth != null && 
+        request.auth.uid == resource.data.createdBy;
+    }
+    
+    // Form responses - simplified access
+    match /formResponses/{responseId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Events - simplified rules for better calendar functionality
+    match /events/{eventId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.createdBy;
+      allow update, delete: if request.auth != null && 
+        request.auth.uid == resource.data.createdBy;
+    }
+    
+    // Announcements - simplified access
+    match /announcements/{announcementId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.createdBy;
+      allow update, delete: if request.auth != null && 
+        request.auth.uid == resource.data.createdBy;
+    }
+    
+    // Resources - simplified access
+    match /resources/{resourceId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.createdBy;
+      allow update, delete: if request.auth != null && 
+        request.auth.uid == resource.data.createdBy;
+    }
+  }
+}
