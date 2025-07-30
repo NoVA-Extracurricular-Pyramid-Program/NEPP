@@ -23,6 +23,8 @@ class GroupsService {
     // Create a new group
     async createGroup(groupData, userId) {
         try {
+            const joinCode = this.generateJoinCode();
+            
             const group = {
                 name: groupData.name,
                 description: groupData.description || '',
@@ -32,6 +34,7 @@ class GroupsService {
                 ownerId: userId, // Keep ownerId for backward compatibility
                 members: [userId],
                 admins: [userId],
+                joinCode: joinCode,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp()
             };
@@ -46,6 +49,61 @@ class GroupsService {
             };
         } catch (error) {
             console.error('Error creating group:', error);
+            throw error;
+        }
+    }
+
+    // Generate a 6-character alphanumeric join code
+    generateJoinCode() {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let result = '';
+        for (let i = 0; i < 6; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+    }
+
+    // Join a group by code
+    async joinGroupByCode(joinCode, userId) {
+        try {
+            // Find group by join code
+            const q = query(
+                collection(db, this.collectionName),
+                where('joinCode', '==', joinCode.toUpperCase())
+            );
+            
+            const querySnapshot = await getDocs(q);
+            
+            if (querySnapshot.empty) {
+                throw new Error('Invalid join code');
+            }
+
+            const groupDoc = querySnapshot.docs[0];
+            const groupData = groupDoc.data();
+            const groupId = groupDoc.id;
+
+            // Check if user is already a member
+            if (groupData.members.includes(userId)) {
+                throw new Error('You are already a member of this group');
+            }
+
+            // Check max members limit
+            if (groupData.maxMembers && groupData.members.length >= groupData.maxMembers) {
+                throw new Error('This group has reached its maximum number of members');
+            }
+
+            // Add user to group
+            await updateDoc(doc(db, this.collectionName, groupId), {
+                members: arrayUnion(userId),
+                updatedAt: serverTimestamp()
+            });
+
+            return {
+                groupId: groupId,
+                groupName: groupData.name
+            };
+        } catch (error) {
+            console.error('Error joining group by code:', error);
             throw error;
         }
     }
