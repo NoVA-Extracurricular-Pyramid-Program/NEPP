@@ -6,6 +6,36 @@
     margin-bottom: 2rem;
 }
 
+.groups-actions {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.join-by-code-btn {
+    background: var(--bg-primary);
+    color: var(--text-white);
+    border: 2px solid var(--accent-color);
+    border-radius: 8px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+}
+
+.join-by-code-btn:hover {
+    background: var(--accent-color);
+    color: var(--bg-primary);
+}
+
+.join-by-code-btn svg {
+    width: 1rem;
+    height: 1rem;
+}
+
 .groups-header h1 {
     font-size: 2.4rem;
     font-weight: 700;
@@ -468,6 +498,57 @@
     color: var(--text-white);
     margin-bottom: 2rem;
     line-height: 1.6;
+}
+
+.join-code-section {
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background: var(--bg-primary);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.join-code-display {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 0.5rem;
+}
+
+.join-code {
+    background: var(--bg-secondary);
+    color: var(--accent-color);
+    font-family: 'Courier New', monospace;
+    font-size: 1.25rem;
+    font-weight: 600;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    border: 1px solid var(--accent-color);
+    letter-spacing: 2px;
+}
+
+.copy-btn {
+    background: var(--accent-color);
+    color: var(--bg-primary);
+    border: none;
+    border-radius: 6px;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+}
+
+.copy-btn:hover {
+    background: #e6c100;
+}
+
+.copy-btn svg {
+    width: 1rem;
+    height: 1rem;
 }
 
 .group-members-section {
