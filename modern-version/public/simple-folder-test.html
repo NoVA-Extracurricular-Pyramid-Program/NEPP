@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Folder Creation - NEPP</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        .status {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            display: none;
+        }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        input { padding: 8px; margin: 5px; border: 1px solid #ccc; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗂️ Test Folder Creation</h1>
+        
+        <div id="authStatus" class="status info">
+            Checking authentication...
+        </div>
+
+        <div id="testArea" style="display: none;">
+            <h3>Create a Test Folder</h3>
+            <input type="text" id="folderName" placeholder="Enter folder name" value="My Test Folder">
+            <br><br>
+            <button onclick="createTestFolder()">Create Folder</button>
+            <button onclick="checkPermissions()">Check Permissions</button>
+            <button onclick="verifyEmail()">Check Email Status</button>
+        </div>
+
+        <div id="results" class="status"></div>
+    </div>
+
+    <script type="module" src="/config/firebase-config.js"></script>
+    <script type="module">
+        import { auth, db } from '/config/firebase-config.js';
+        import { onAuthStateChanged, sendEmailVerification } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+        import { 
+            collection, 
+            addDoc, 
+            serverTimestamp 
+        } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+
+        let currentUser = null;
+
+        // Auth state listener
+        onAuthStateChanged(auth, (user) => {
+            const authStatus = document.getElementById('authStatus');
+            const testArea = document.getElementById('testArea');
+            
+            if (user) {
+                currentUser = user;
+                authStatus.className = 'status success';
+                authStatus.style.display = 'block';
+                authStatus.innerHTML = `
+                    ✅ Logged in as: ${user.email}<br>
+                    Email verified: ${user.emailVerified ? '✅ Yes' : '❌ No'}
+                `;
+                testArea.style.display = 'block';
+                
+                if (!user.emailVerified) {
+                    authStatus.innerHTML += '<br>⚠️ Email verification required for folder creation';
+                }
+            } else {
+                currentUser = null;
+                authStatus.className = 'status error';
+                authStatus.style.display = 'block';
+                authStatus.innerHTML = '❌ Not logged in. Please <a href="/login.html">login</a> first.';
+                testArea.style.display = 'none';
+            }
+        });
+
+        // Test folder creation
+        window.createTestFolder = async () => {
+            const folderName = document.getElementById('folderName').value.trim();
+            const results = document.getElementById('results');
+            
+            if (!folderName) {
+                showResult('Please enter a folder name', 'error');
+                return;
+            }
+
+            if (!currentUser) {
+                showResult('Please login first', 'error');
+                return;
+            }
+
+            try {
+                showResult('Creating folder...', 'info');
+                
+                const folderData = {
+                    name: folderName,
+                    parentFolderId: null,
+                    userId: currentUser.uid,
+                    type: 'folder',
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp(),
+                    shareType: 'private',
+                    shareDescription: '',
+                    groupId: null,
+                    sharedWith: [],
+                    isShared: false
+                };
+
+                const docRef = await addDoc(collection(db, 'folders'), folderData);
+                showResult(`✅ Folder created successfully! ID: ${docRef.id}`, 'success');
+                
+            } catch (error) {
+                console.error('Error creating folder:', error);
+                showResult(`❌ Error: ${error.message}`, 'error');
+                
+                if (error.code === 'permission-denied') {
+                    showResult(`❌ Permission denied. This usually means:
+                    <br>• Your email needs to be verified
+                    <br>• You don't have proper access rights
+                    <br>• Firestore rules are blocking the request`, 'error');
+                }
+            }
+        };
+
+        // Check permissions
+        window.checkPermissions = () => {
+            const results = document.getElementById('results');
+            if (currentUser) {
+                showResult(`
+                    Current user: ${currentUser.email}<br>
+                    UID: ${currentUser.uid}<br>
+                    Email verified: ${currentUser.emailVerified}<br>
+                    Created: ${currentUser.metadata.creationTime}
+                `, 'info');
+            } else {
+                showResult('No user logged in', 'error');
+            }
+        };
+
+        // Email verification
+        window.verifyEmail = async () => {
+            if (!currentUser) {
+                showResult('Please login first', 'error');
+                return;
+            }
+
+            if (currentUser.emailVerified) {
+                showResult('✅ Email is already verified!', 'success');
+                return;
+            }
+
+            try {
+                await sendEmailVerification(currentUser);
+                showResult('📧 Verification email sent! Check your inbox.', 'info');
+            } catch (error) {
+                showResult(`❌ Error sending verification: ${error.message}`, 'error');
+            }
+        };
+
+        function showResult(message, type) {
+            const results = document.getElementById('results');
+            results.className = `status ${type}`;
+            results.innerHTML = message;
+            results.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
