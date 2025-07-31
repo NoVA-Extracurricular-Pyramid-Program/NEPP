@@ -641,14 +641,54 @@ class ResourcesManager {
             return;
         }
 
+        // Validate folder name length and characters
+        if (name.length > 100) {
+            this.showError('Folder name cannot exceed 100 characters');
+            return;
+        }
+
+        if (!/^[a-zA-Z0-9\s\-_\.()]+$/.test(name)) {
+            this.showError('Folder name contains invalid characters. Use only letters, numbers, spaces, hyphens, underscores, dots, and parentheses.');
+            return;
+        }
+
+        // Check if user is authenticated
+        if (!this.currentUser || !this.currentUser.uid) {
+            this.showError('You must be logged in to create folders');
+            return;
+        }
+
         try {
-            await ResourcesService.createFolder(name, this.currentFolderId, this.currentUser.uid);
+            // Set loading state
+            this.confirmCreateFolderBtn.disabled = true;
+            this.confirmCreateFolderBtn.textContent = 'Creating...';
+
+            // Create folder with proper parent folder ID (null for root level)
+            const parentFolderId = this.currentFolderId || null;
+            console.log('Creating folder:', { name, parentFolderId, userId: this.currentUser.uid });
+            
+            await ResourcesService.createFolder(name, parentFolderId, this.currentUser.uid);
+            
             this.hideCreateFolderModal();
             this.showSuccess('Folder created successfully');
             await this.loadFolderContents();
         } catch (error) {
             console.error('Error creating folder:', error);
-            this.showError('Failed to create folder');
+            
+            // Provide more specific error messages
+            if (error.code === 'permission-denied') {
+                this.showError('Permission denied. Please check your account privileges.');
+            } else if (error.code === 'unauthenticated') {
+                this.showError('Authentication required. Please log in again.');
+            } else if (error.message && error.message.includes('email_verified')) {
+                this.showError('Email verification required. Please verify your email address.');
+            } else {
+                this.showError(`Failed to create folder: ${error.message || 'Unknown error'}`);
+            }
+        } finally {
+            // Reset button state
+            this.confirmCreateFolderBtn.disabled = false;
+            this.confirmCreateFolderBtn.textContent = 'Create Folder';
         }
     }
 
