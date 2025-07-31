@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Groups - NEPP</title>
+    <link rel="icon" href="../images/logo.png" type="image/png">
     <link rel="stylesheet" href="../css/styles.css">
     <link rel="stylesheet" href="../css/groups.css">
 </head>
@@ -13,12 +14,20 @@
         <main class="main-content">
             <div class="groups-header">
                 <h1>Groups</h1>
-                <button id="createGroupBtn" class="create-group-btn">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                    Create Group
-                </button>
+                <div class="header-actions">
+                    <button id="joinByCodeBtn" class="join-by-code-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.042 21.672 13.684 16.6m0 0-2.51 2.225.569-9.47 5.227 7.917-3.286-.672ZM12 2.25V4.5m5.834.166-1.591 1.591M20.25 10.5H18M7.757 14.743l-1.59 1.59M6 10.5H3.75m4.007-4.243-1.59-1.59" />
+                        </svg>
+                        Join by Code
+                    </button>
+                    <button id="createGroupBtn" class="create-group-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        Create Group
+                    </button>
+                </div>
             </div>
             
             <div class="groups-container">
@@ -80,6 +89,55 @@
                             <input type="number" id="maxMembers" name="maxMembers" min="1" max="1000">
                         </div>
                         
+                        <!-- Member Management Section (only visible during edit) -->
+                        <div class="form-group" id="memberManagementGroup" style="display: none;">
+                            <label>Member Management</label>
+                            <div class="member-management-section">
+                                <div class="member-selection-type">
+                                    <label>
+                                        <input type="radio" name="memberSelectionType" value="individual" checked>
+                                        Add Individual Users
+                                    </label>
+                                    <label>
+                                        <input type="radio" name="memberSelectionType" value="group">
+                                        Add from Groups
+                                    </label>
+                                </div>
+                                
+                                <div id="individualUserSelection" class="selection-container">
+                                    <label for="userSelector">Select Users:</label>
+                                    <select id="userSelector" multiple style="width: 100%; min-height: 100px;">
+                                        <!-- Users will be populated here -->
+                                    </select>
+                                </div>
+                                
+                                <div id="groupMemberSelection" class="selection-container" style="display: none;">
+                                    <label for="groupSelector">Select from Groups:</label>
+                                    <select id="groupSelector" multiple style="width: 100%; min-height: 100px;">
+                                        <!-- Groups will be populated here -->
+                                    </select>
+                                </div>
+                                
+                                <div class="current-members">
+                                    <h4>Current Members:</h4>
+                                    <div id="currentMembersList">
+                                        <!-- Current members will be displayed here -->
+                                    </div>
+                                </div>
+                                
+                                <div class="co-owner-section">
+                                    <h4>Co-Owners:</h4>
+                                    <select id="coOwnerSelector">
+                                        <option value="">Select a co-owner (optional)</option>
+                                        <!-- Members will be populated here -->
+                                    </select>
+                                    <div id="currentCoOwners">
+                                        <!-- Current co-owners will be displayed here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <div class="form-actions">
                             <button type="button" id="cancelCreateGroup" class="cancel-btn">Cancel</button>
                             <button type="submit" class="submit-btn">Create Group</button>
@@ -88,6 +146,24 @@
                 </div>
             </div>
             
+            <!-- Join by Code Modal -->
+            <div id="joinByCodeModal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <h2>Join Group by Code</h2>
+                    <form id="joinByCodeForm">
+                        <div class="form-group">
+                            <label for="joinCode">Join Code *</label>
+                            <input type="text" id="joinCode" name="joinCode" required maxlength="6" placeholder="Enter 6-character code" style="text-transform: uppercase;">
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="button" id="cancelJoinByCode" class="cancel-btn">Cancel</button>
+                            <button type="submit" class="submit-btn">Join Group</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
             <!-- Group Details Modal -->
             <div id="groupDetailsModal" class="modal" style="display: none;">
                 <div class="modal-content group-details-content">

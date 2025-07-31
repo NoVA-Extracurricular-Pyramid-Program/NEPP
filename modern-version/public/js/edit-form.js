@@ -4,10 +4,13 @@ import {
   doc, 
   getDoc, 
   updateDoc, 
-  Timestamp 
+  Timestamp,
+  collection,
+  getDocs,
+  query,
+  where
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
-import { initializeAuth } from '/utils/auth-utils.js';
 
 let currentFormType = 'public';
 let questions = [];
@@ -19,19 +22,33 @@ const urlParams = new URLSearchParams(window.location.search);
 formId = urlParams.get('id');
 
 if (!formId) {
+  alert('No form ID provided');
   window.location.href = 'forms.html';
 }
 
-// Initialize auth and load form data
-initializeAuth().then(async (authResult) => {
-  if (authResult) {
-    await loadFormData();
-    initializeEventListeners();
-  }
-}).catch(error => {
-  console.error('Authentication error:', error);
-  showAuthAlert();
+// Initialize when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+  onAuthStateChanged(auth, async (user) => {
+    if (user && !isInitialized) {
+      console.log('User authenticated:', user.email);
+      isInitialized = true;
+      await loadFormData();
+      await loadGroups();
+      initializePage();
+    } else if (!user) {
+      console.log('User not authenticated');
+      showAuthAlert();
+    }
+  });
 });
+
+function initializePage() {
+  // Set up event listeners
+  initializeEventListeners();
+  
+  // Complete the form data loading and display
+  completeFormDataLoad();
+}
 
 function initializeEventListeners() {
   // Initialize form submission
@@ -40,45 +57,53 @@ function initializeEventListeners() {
     form.addEventListener('submit', handleFormSubmit);
   }
 
-  // Initialize cancel button
-  const cancelButton = document.getElementById('cancelForm');
-  if (cancelButton) {
-    cancelButton.addEventListener('click', (e) => {
-      e.preventDefault();
-      if (confirm('Are you sure you want to cancel? All changes will be lost.')) {
-        window.location.href = 'forms.html';
-      }
+  // Initialize other components
+  initializeFormTypeButtons();
+  initializeQuestionTypeButtons();
+  initializeCancelButton();
+  initializeFormSubmission();
+}
+
+function displayQuestions() {
+  const questionsContainer = document.getElementById('questionsContainer');
+  if (questionsContainer) {
+    questionsContainer.innerHTML = '';
+    
+    questions.forEach((questionData, index) => {
+      addQuestionToDOM(questionData.type, questionData, index);
     });
   }
+}
 
-  // Initialize question type buttons
-  const questionTypeBtns = document.querySelectorAll('.question-type-btn');
-  questionTypeBtns.forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      const type = btn.dataset.type;
-      addQuestion(type);
-    });
-  });
-
-  // Initialize form type toggle
-  const publicRadio = document.getElementById('public');
-  const privateRadio = document.getElementById('private');
+function updateFormTypeUI() {
+  const groupSelector = document.getElementById('groupSelector');
+  const groupSelect = document.getElementById('group');
   
-  if (publicRadio && privateRadio) {
-    publicRadio.addEventListener('change', () => {
-      if (publicRadio.checked) {
-        currentFormType = 'public';
-        document.getElementById('groupSelector').style.display = 'none';
-      }
-    });
-
-    privateRadio.addEventListener('change', () => {
-      if (privateRadio.checked) {
-        currentFormType = 'private';
-        document.getElementById('groupSelector').style.display = 'block';
-      }
-    });
+  if (currentFormType === 'private') {
+    const privateBtn = document.querySelector('.form-type-btn[data-type="private"]');
+    if (privateBtn) {
+      document.querySelectorAll('.form-type-btn').forEach(btn => btn.classList.remove('active'));
+      privateBtn.classList.add('active');
+    }
+    if (groupSelector) {
+      groupSelector.style.display = 'block';
+    }
+    if (groupSelect) {
+      groupSelect.setAttribute('required', 'required');
+    }
+  } else {
+    const publicBtn = document.querySelector('.form-type-btn[data-type="public"]');
+    if (publicBtn) {
+      document.querySelectorAll('.form-type-btn').forEach(btn => btn.classList.remove('active'));
+      publicBtn.classList.add('active');
+    }
+    if (groupSelector) {
+      groupSelector.style.display = 'none';
+    }
+    if (groupSelect) {
+      groupSelect.removeAttribute('required');
+      groupSelect.value = '';
+    }
   }
 }
 
@@ -102,47 +127,76 @@ async function loadFormData() {
       return;
     }
 
+    console.log('Loading form data:', formData);
+
     // Populate form fields
     document.getElementById('formTitle').value = formData.title || '';
     document.getElementById('formDescription').value = formData.description || '';
     
+    // Handle due date
     if (formData.dueDate) {
-      const dueDate = formData.dueDate.toDate();
-      const localDateTime = new Date(dueDate.getTime() - dueDate.getTimezoneOffset() * 60000);
-      document.getElementById('dueDate').value = localDateTime.toISOString().slice(0, 16);
+      let dueDateValue;
+      if (typeof formData.dueDate.toDate === 'function') {
+        // It's a Firestore Timestamp
+        dueDateValue = formData.dueDate.toDate().toISOString().slice(0, 16);
+      } else if (formData.dueDate instanceof Date) {
+        // It's already a Date object
+        dueDateValue = formData.dueDate.toISOString().slice(0, 16);
+      } else if (typeof formData.dueDate === 'string') {
+        // It's a string, try to parse it
+        dueDateValue = new Date(formData.dueDate).toISOString().slice(0, 16);
+      }
+      if (dueDateValue) {
+        document.getElementById('dueDate').value = dueDateValue;
+      }
     }
-
+    
     // Set form type
     currentFormType = formData.type || 'public';
-    if (currentFormType === 'private') {
-      const privateRadio = document.getElementById('private');
-      if (privateRadio) {
-        privateRadio.checked = true;
-        document.getElementById('groupSelector').style.display = 'block';
-        if (formData.group) {
-          document.getElementById('group').value = formData.group;
-        }
-      }
-    } else {
-      const publicRadio = document.getElementById('public');
-      if (publicRadio) {
-        publicRadio.checked = true;
-      }
-    }
-
+    
     // Load questions
     questions = formData.questions || [];
-    const questionsContainer = document.getElementById('questionsContainer');
-    questionsContainer.innerHTML = '';
     
-    questions.forEach(questionData => {
-      addQuestion(questionData.type, questionData);
-    });
+    // Store group selection for later
+    if (currentFormType === 'private' && formData.group) {
+      window.selectedGroupId = formData.group;
+    }
 
   } catch (error) {
     console.error('Error loading form data:', error);
     alert('Error loading form: ' + error.message);
     window.location.href = 'forms.html';
+  }
+}
+
+async function loadGroups() {
+  try {
+    const groupsQuery = query(
+      collection(db, 'groups'),
+      where('members', 'array-contains', auth.currentUser.uid)
+    );
+    const groupsSnapshot = await getDocs(groupsQuery);
+    
+    const groupSelect = document.getElementById('group');
+    if (groupSelect) {
+      groupSelect.innerHTML = '<option value="">Select a group...</option>';
+      
+      groupsSnapshot.forEach(doc => {
+        const groupData = doc.data();
+        const option = document.createElement('option');
+        option.value = doc.id;
+        option.textContent = groupData.name;
+        groupSelect.appendChild(option);
+      });
+      
+      // Set the selected group if we stored one
+      if (window.selectedGroupId) {
+        groupSelect.value = window.selectedGroupId;
+        delete window.selectedGroupId; // Clean up
+      }
+    }
+  } catch (error) {
+    console.error('Error loading groups:', error);
   }
 }
 
@@ -175,82 +229,21 @@ function showAuthAlert() {
   });
 }
 
-// Initialize event listeners and load form data
-document.addEventListener('DOMContentLoaded', () => {
-  // Set up the auth state listener first
-  auth.onAuthStateChanged(async (user) => {
-    if (user) {
-      // User is signed in
-      console.log('User is signed in:', user.email);
-      await loadFormData();
-      initializePage();
-    } else {
-      // User is not signed in
-      console.log('No user is signed in');
-      showAuthAlert();
-    }
-  });
-});
-
-function initializePage() {
-  if (isInitialized) return;
-  
-  initializeFormTypeButtons();
-  initializeQuestionTypeButtons();
-  initializeCancelButton();
-  initializeFormSubmission();
-  
-  isInitialized = true;
-}
-
-async function loadFormData() {
-  try {
-    const formDoc = await getDoc(doc(db, 'forms', formId));
-    if (!formDoc.exists()) {
-      alert('Form not found');
-      window.location.href = 'forms.html';
-      return;
-    }
-
-    const formData = formDoc.data();
-    
-    // Populate form fields
-    document.getElementById('formTitle').value = formData.title || '';
-    document.getElementById('formDescription').value = formData.description || '';
-    
-    // Handle due date - it might be a Firestore Timestamp or a Date object
-    if (formData.dueDate) {
-      let dueDateValue;
-      if (typeof formData.dueDate.toDate === 'function') {
-        // It's a Firestore Timestamp
-        dueDateValue = formData.dueDate.toDate().toISOString().slice(0, 16);
-      } else if (formData.dueDate instanceof Date) {
-        // It's already a Date object
-        dueDateValue = formData.dueDate.toISOString().slice(0, 16);
-      } else if (typeof formData.dueDate === 'string') {
-        // It's a string, try to parse it
-        dueDateValue = new Date(formData.dueDate).toISOString().slice(0, 16);
-      }
-      document.getElementById('dueDate').value = dueDateValue;
-    }
-    
-    // Set form type
-    currentFormType = formData.type;
-    document.querySelector(`.form-type-btn[data-type="${currentFormType}"]`).classList.add('active');
-    
-    if (currentFormType === 'private') {
-      document.getElementById('groupSelector').style.display = 'block';
-      document.getElementById('group').value = formData.group;
-    }
-
     // Load questions
-    questions = formData.questions || [];
-    questions.forEach(question => {
-      addQuestion(question.type, question);
-    });
-
+async function completeFormDataLoad() {
+  try {
+    console.log('Loading questions...');
+    
+    // Display the loaded questions
+    displayQuestions();
+    
+    // Set the form type UI
+    updateFormTypeUI();
+    
+    console.log('Form data loaded successfully with', questions.length, 'questions');
+    
   } catch (error) {
-    console.error('Error loading form:', error);
+    console.error('Error completing form data load:', error);
     alert('Error loading form: ' + error.message);
   }
 }
@@ -258,15 +251,25 @@ async function loadFormData() {
 // Add the same helper functions as in create-form.js
 function initializeFormTypeButtons() {
   const formTypeButtons = document.querySelectorAll('.form-type-btn');
+  const groupSelector = document.getElementById('groupSelector');
+  const groupSelect = document.getElementById('group');
+  
   formTypeButtons.forEach(button => {
     button.addEventListener('click', (e) => {
       e.preventDefault();
       formTypeButtons.forEach(btn => btn.classList.remove('active'));
       button.classList.add('active');
       currentFormType = button.getAttribute('data-type');
-      const groupSelector = document.getElementById('groupSelector');
-      if (groupSelector) {
-        groupSelector.style.display = currentFormType === 'private' ? 'block' : 'none';
+      
+      if (groupSelector && groupSelect) {
+        if (currentFormType === 'private') {
+          groupSelector.style.display = 'block';
+          groupSelect.setAttribute('required', 'required');
+        } else {
+          groupSelector.style.display = 'none';
+          groupSelect.removeAttribute('required');
+          groupSelect.value = ''; // Clear selection
+        }
       }
     });
   });
@@ -388,10 +391,7 @@ async function handleFormSubmit(e) {
 }
 
 function addQuestion(type, existingQuestion = null) {
-  const questionDiv = document.createElement('div');
-  questionDiv.className = 'question-container';
-  questionDiv.dataset.type = type;
-  
+  // Add to questions array
   const questionData = existingQuestion || {
     type: type,
     question: '',
@@ -399,6 +399,20 @@ function addQuestion(type, existingQuestion = null) {
     options: type === 'Multiple Choice' || type === 'Checkboxes' ? ['Option 1'] : [],
     scale: type === 'Linear Scale' ? { min: 1, max: 5, minLabel: 'Low', maxLabel: 'High' } : null
   };
+  
+  if (!existingQuestion) {
+    questions.push(questionData);
+  }
+  
+  // Add to DOM
+  addQuestionToDOM(type, questionData, questions.length - 1);
+}
+
+function addQuestionToDOM(type, questionData, index) {
+  const questionDiv = document.createElement('div');
+  questionDiv.className = 'question-container';
+  questionDiv.dataset.type = type;
+  questionDiv.dataset.index = index;
 
   questionDiv.innerHTML = `
     <div class="question-header">
@@ -418,12 +432,23 @@ function addQuestion(type, existingQuestion = null) {
   // Add event listeners for the question
   const deleteBtn = questionDiv.querySelector('.delete-question-btn');
   deleteBtn.addEventListener('click', () => {
+    const questionIndex = parseInt(questionDiv.dataset.index);
+    questions.splice(questionIndex, 1);
     questionDiv.remove();
-    updateQuestions();
+    updateQuestionIndices();
+  });
+
+  const titleInput = questionDiv.querySelector('.question-title-input');
+  titleInput.addEventListener('input', () => {
+    const questionIndex = parseInt(questionDiv.dataset.index);
+    questions[questionIndex].question = titleInput.value;
   });
 
   const requiredToggle = questionDiv.querySelector('.required-toggle input');
-  requiredToggle.addEventListener('change', updateQuestions);
+  requiredToggle.addEventListener('change', () => {
+    const questionIndex = parseInt(questionDiv.dataset.index);
+    questions[questionIndex].required = requiredToggle.checked;
+  });
 
   // Add options management for multiple choice and checkboxes
   if (type === 'Multiple Choice' || type === 'Checkboxes') {
@@ -431,7 +456,13 @@ function addQuestion(type, existingQuestion = null) {
   }
 
   document.getElementById('questionsContainer').appendChild(questionDiv);
-  updateQuestions();
+}
+
+function updateQuestionIndices() {
+  const questionContainers = document.querySelectorAll('.question-container');
+  questionContainers.forEach((container, index) => {
+    container.dataset.index = index;
+  });
 }
 
 function generateQuestionInputs(type, data) {

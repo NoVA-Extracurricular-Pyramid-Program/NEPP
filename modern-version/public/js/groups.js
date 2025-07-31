@@ -9,6 +9,7 @@ class GroupsManager {
         this.filteredMyGroups = [];
         this.filteredAvailableGroups = [];
         this.currentTab = 'my-groups';
+        this.editingGroupId = null;
         
         this.initializeElements();
         this.bindEvents();
@@ -31,12 +32,12 @@ class GroupsManager {
         // Button elements
         this.createGroupBtn = document.getElementById('createGroupBtn');
         this.joinByCodeBtn = document.getElementById('joinByCodeBtn');
-        
+
         // Modal elements
         this.createGroupModal = document.getElementById('createGroupModal');
         this.createGroupForm = document.getElementById('createGroupForm');
         this.cancelCreateGroupBtn = document.getElementById('cancelCreateGroup');
-        
+
         this.joinByCodeModal = document.getElementById('joinByCodeModal');
         this.joinByCodeForm = document.getElementById('joinByCodeForm');
         this.cancelJoinByCodeBtn = document.getElementById('cancelJoinByCode');
@@ -50,6 +51,20 @@ class GroupsManager {
         this.confirmMessage = document.getElementById('confirmMessage');
         this.confirmCancelBtn = document.getElementById('confirmCancel');
         this.confirmActionBtn = document.getElementById('confirmAction');
+        
+        // Member management elements
+        this.memberManagementGroup = document.getElementById('memberManagementGroup');
+        this.memberSelectionRadios = document.querySelectorAll('input[name="memberSelectionType"]');
+        this.individualUserSelection = document.getElementById('individualUserSelection');
+        this.groupMemberSelection = document.getElementById('groupMemberSelection');
+        this.userSelector = document.getElementById('userSelector');
+        this.groupSelector = document.getElementById('groupSelector');
+        this.currentMembersList = document.getElementById('currentMembersList');
+        this.coOwnerSelector = document.getElementById('coOwnerSelector');
+        this.currentCoOwners = document.getElementById('currentCoOwners');
+        
+        // Initialize member selection toggle
+        this.initializeMemberSelectionToggle();
     }
 
     bindEvents() {
@@ -108,6 +123,9 @@ class GroupsManager {
         this.confirmCancelBtn.addEventListener('click', () => {
             this.hideConfirmModal();
         });
+        
+        // Member selection toggle
+        this.initializeMemberSelectionToggle();
 
         // Close modals when clicking outside
         this.createGroupModal.addEventListener('click', (e) => {
@@ -143,15 +161,47 @@ class GroupsManager {
                 
                 // Load groups
                 await this.loadGroups();
+                
+                // Check for group parameter in URL (for notifications)
+                this.checkForGroupParameter();
             } else {
                 this.showAuthAlert();
             }
         });
     }
 
+    checkForGroupParameter() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const groupId = urlParams.get('group');
+        
+        if (groupId) {
+            // Show the group details modal after a short delay to ensure everything is loaded
+            setTimeout(() => {
+                this.showGroupDetails(groupId);
+                // Clean up the URL parameter
+                const newUrl = window.location.pathname;
+                window.history.replaceState({}, document.title, newUrl);
+            }, 500);
+        }
+    }
+
     showAuthAlert() {
         alert('Please log in to access groups.');
         window.location.href = 'login.html';
+    }
+    
+    initializeMemberSelectionToggle() {
+        this.memberSelectionRadios?.forEach(radio => {
+            radio.addEventListener('change', () => {
+                if (radio.value === 'individual') {
+                    this.individualUserSelection.style.display = 'block';
+                    this.groupMemberSelection.style.display = 'none';
+                } else {
+                    this.individualUserSelection.style.display = 'none';
+                    this.groupMemberSelection.style.display = 'block';
+                }
+            });
+        });
     }
 
     switchTab(tabName) {
@@ -220,6 +270,19 @@ class GroupsManager {
                         <div class="group-type ${group.type}">${group.type}</div>
                     </div>
                     <p class="group-description">${group.description || 'No description provided.'}</p>
+                    ${(role === 'owner' || role === 'admin') && group.joinCode ? `
+                        <div class="join-code-section">
+                            <div class="join-code-display">
+                                <div class="join-code">${group.joinCode}</div>
+                                <button class="copy-btn" onclick="event.stopPropagation(); groupsManager.copyJoinCode('${group.joinCode}')">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" />
+                                    </svg>
+                                    Copy
+                                </button>
+                            </div>
+                        </div>
+                    ` : ''}
                     <div class="group-meta">
                         <div class="group-members">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -302,6 +365,33 @@ class GroupsManager {
 
     hideCreateGroupModal() {
         this.createGroupModal.style.display = 'none';
+        
+        // Reset form
+        this.createGroupForm.reset();
+        
+        // Hide member management section
+        this.memberManagementGroup.style.display = 'none';
+        
+        // Clear member management selections
+        this.userSelector.innerHTML = '';
+        this.groupSelector.innerHTML = '';
+        this.currentMembersList.innerHTML = '';
+        this.currentCoOwners.innerHTML = '';
+        this.coOwnerSelector.innerHTML = '<option value="">Select a co-owner (optional)</option>';
+        
+        // Reset member selection type
+        const individualRadio = document.querySelector('input[name="memberSelectionType"][value="individual"]');
+        if (individualRadio) individualRadio.checked = true;
+        this.individualUserSelection.style.display = 'block';
+        this.groupMemberSelection.style.display = 'none';
+        
+        // Reset modal title and button text for next use
+        this.createGroupModal.querySelector('h2').textContent = 'Create New Group';
+        const submitBtn = this.createGroupForm.querySelector('button[type="submit"]');
+        submitBtn.textContent = 'Create Group';
+        
+        // Clear editing state
+        this.editingGroupId = null;
     }
 
     showJoinByCodeModal() {
@@ -326,17 +416,81 @@ class GroupsManager {
             // Validate group data
             GroupsService.validateGroupData(groupData);
 
-            // Create the group
-            await GroupsService.createGroup(groupData, this.currentUser.uid);
+            if (this.editingGroupId) {
+                // Update existing group
+                await GroupsService.updateGroup(this.editingGroupId, groupData, this.currentUser.uid);
+                
+                // Handle member additions during edit
+                await this.handleMemberAdditions();
+                
+                // Handle co-owner selection
+                await this.handleCoOwnerSelection();
+                
+                this.showSuccess('Group updated successfully');
+            } else {
+                // Create new group
+                await GroupsService.createGroup(groupData, this.currentUser.uid);
+                this.showSuccess('Group created successfully');
+            }
 
             this.hideCreateGroupModal();
-            this.showSuccess('Group created successfully');
             
             // Reload groups
             await this.loadGroups();
         } catch (error) {
-            console.error('Error creating group:', error);
+            console.error('Error saving group:', error);
             this.showError(error.message);
+        }
+    }
+    
+    async handleMemberAdditions() {
+        try {
+            const selectedType = document.querySelector('input[name="memberSelectionType"]:checked').value;
+            
+            if (selectedType === 'individual') {
+                // Add selected individual users
+                const selectedUsers = Array.from(this.userSelector.selectedOptions).map(option => option.value);
+                if (selectedUsers.length > 0) {
+                    await GroupsService.addMembersToGroup(this.editingGroupId, selectedUsers);
+                }
+            } else if (selectedType === 'group') {
+                // Add members from selected groups
+                const selectedGroups = Array.from(this.groupSelector.selectedOptions).map(option => option.value);
+                for (const groupId of selectedGroups) {
+                    const group = await GroupsService.getGroupDetails(groupId);
+                    await GroupsService.addMembersToGroup(this.editingGroupId, group.members);
+                }
+            }
+        } catch (error) {
+            console.error('Error adding members:', error);
+            throw error;
+        }
+    }
+    
+    async handleCoOwnerSelection() {
+        try {
+            const selectedCoOwner = this.coOwnerSelector.value;
+            if (selectedCoOwner) {
+                // Get group and user details for notification
+                const group = await GroupsService.getGroupDetails(this.editingGroupId);
+                const coOwnerUser = await GroupsService.getUserById(selectedCoOwner);
+                const currentUserDoc = await GroupsService.getUserById(this.currentUser.uid);
+                
+                // Send notification instead of directly adding co-owner
+                const NotificationService = (await import('/services/notification-service.js')).default;
+                await NotificationService.createCoOwnerInvite(
+                    this.editingGroupId,
+                    group.name,
+                    this.currentUser.uid,
+                    currentUserDoc.displayName || currentUserDoc.email,
+                    selectedCoOwner
+                );
+                
+                this.showSuccess(`Co-owner invitation sent to ${coOwnerUser.displayName || coOwnerUser.email}`);
+            }
+        } catch (error) {
+            console.error('Error sending co-owner invitation:', error);
+            throw error;
         }
     }
 
@@ -425,6 +579,56 @@ class GroupsManager {
         }
     }
 
+    async editGroup(groupId) {
+        try {
+            const group = await GroupsService.getGroupDetails(groupId);
+            
+            // Check if user is owner or co-owner
+            const isOwner = group.ownerId === this.currentUser.uid;
+            const isCoOwner = group.coOwners && group.coOwners.includes(this.currentUser.uid);
+            
+            if (!isOwner && !isCoOwner) {
+                this.showError('Only the group owner or co-owners can edit the group');
+                return;
+            }
+
+            // Populate the form with current values
+            document.getElementById('groupName').value = group.name;
+            document.getElementById('groupDescription').value = group.description || '';
+            document.getElementById('groupType').value = group.type;
+            document.getElementById('maxMembers').value = group.maxMembers || '';
+
+            // Show member management section
+            this.memberManagementGroup.style.display = 'block';
+            
+            // Load users and groups for selection
+            await this.loadUsersAndGroupsForMemberManagement();
+            
+            // Display current members
+            await this.displayCurrentMembers(group);
+            
+            // Display current co-owners
+            this.displayCurrentCoOwners(group);
+            
+            // Populate co-owner selector with current members
+            this.populateCoOwnerSelector(group);
+
+            // Change modal title and button text
+            this.createGroupModal.querySelector('h2').textContent = 'Edit Group';
+            const submitBtn = this.createGroupForm.querySelector('button[type="submit"]');
+            submitBtn.textContent = 'Update Group';
+
+            // Store the group ID for updating
+            this.editingGroupId = groupId;
+
+            // Show the modal
+            this.createGroupModal.style.display = 'flex';
+        } catch (error) {
+            console.error('Error loading group for editing:', error);
+            this.showError('Failed to load group details');
+        }
+    }
+
     async showGroupDetails(groupId) {
         try {
             const group = await GroupsService.getGroupDetails(groupId);
@@ -475,7 +679,9 @@ class GroupsManager {
                         ${group.members.map(memberId => {
                             const memberRole = GroupsService.getUserRole(group, memberId);
                             const isCurrentUser = memberId === this.currentUser.uid;
-                            const canManage = userRole === 'owner' || (userRole === 'admin' && memberRole === 'member');
+                            // Co-owners and owners can manage admins and members, admins can only manage members
+                            const canManage = (userRole === 'owner' || userRole === 'co-owner') || 
+                                            (userRole === 'admin' && memberRole === 'member');
                             
                             return `
                                 <div class="member-item">
@@ -483,17 +689,17 @@ class GroupsManager {
                                         <div class="member-avatar">${memberId.charAt(0).toUpperCase()}</div>
                                         <div class="member-details">
                                             <div class="member-name">${isCurrentUser ? 'You' : memberId}</div>
-                                            <div class="member-role-text">${memberRole}</div>
+                                            <div class="member-role-text ${memberRole}">${memberRole}</div>
                                         </div>
                                     </div>
                                     ${canManage && !isCurrentUser ? `
                                         <div class="member-actions">
-                                            ${memberRole === 'member' && userRole === 'owner' ? `
+                                            ${memberRole === 'member' && (userRole === 'owner' || userRole === 'co-owner') ? `
                                                 <button class="member-action-btn" onclick="groupsManager.promoteToAdmin('${groupId}', '${memberId}')">
                                                     Make Admin
                                                 </button>
                                             ` : ''}
-                                            ${memberRole === 'admin' && userRole === 'owner' ? `
+                                            ${memberRole === 'admin' && (userRole === 'owner' || userRole === 'co-owner') ? `
                                                 <button class="member-action-btn" onclick="groupsManager.removeAdmin('${groupId}', '${memberId}')">
                                                     Remove Admin
                                                 </button>
@@ -507,13 +713,150 @@ class GroupsManager {
                             `;
                         }).join('')}
                     </div>
+                    ${(userRole === 'owner' || userRole === 'co-owner' || userRole === 'admin') ? `
+                        <div class="add-member-section">
+                            <h4 class="section-title">Add New Members</h4>
+                            <div class="user-search-container">
+                                <input type="text" id="memberSearch" placeholder="Search users by name or email..." class="search-input">
+                                <div id="userSearchResults" class="search-results" style="display: none;"></div>
+                            </div>
+                        </div>
+                    ` : ''}
                 </div>
             `;
             
             this.groupDetailsModal.style.display = 'flex';
+            
+            // Initialize member search functionality if the section exists
+            const memberSearch = document.getElementById('memberSearch');
+            if (memberSearch) {
+                this.initializeMemberSearch(groupId);
+            }
         } catch (error) {
             console.error('Error loading group details:', error);
             this.showError('Failed to load group details');
+        }
+    }
+
+    async initializeMemberSearch(groupId) {
+        const memberSearch = document.getElementById('memberSearch');
+        const searchResults = document.getElementById('userSearchResults');
+        let allUsers = [];
+        
+        try {
+            // Load all users
+            allUsers = await GroupsService.getAllUsers();
+        } catch (error) {
+            console.error('Error loading users:', error);
+            allUsers = []; // Fallback to empty array
+        }
+        
+        memberSearch.addEventListener('input', (e) => {
+            const query = e.target.value.trim();
+            if (query.length < 2) {
+                searchResults.style.display = 'none';
+                return;
+            }
+            
+            const filteredUsers = allUsers.filter(user => {
+                const matchesQuery = user.name?.toLowerCase().includes(query.toLowerCase()) ||
+                                   user.email?.toLowerCase().includes(query.toLowerCase());
+                return matchesQuery && user.id !== this.currentUser.uid;
+            });
+            
+            this.displayUserSearchResults(filteredUsers, groupId, searchResults);
+        });
+        
+        // Hide results when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.user-search-container')) {
+                searchResults.style.display = 'none';
+            }
+        });
+    }
+    
+    displayUserSearchResults(users, groupId, resultsContainer) {
+        if (users.length === 0) {
+            resultsContainer.innerHTML = '<div class="no-results">No users found</div>';
+        } else {
+            resultsContainer.innerHTML = users.map(user => `
+                <div class="user-search-result" onclick="groupsManager.addMemberToGroup('${groupId}', '${user.id}', '${user.name || user.email}')">
+                    <div class="user-result-info">
+                        <div class="user-result-name">${user.name || user.email}</div>
+                        <div class="user-result-email">${user.email}</div>
+                    </div>
+                    <button class="add-member-btn">Add</button>
+                </div>
+            `).join('');
+        }
+        resultsContainer.style.display = 'block';
+    }
+    
+    async addMemberToGroup(groupId, userId, userName) {
+        try {
+            await GroupsService.addMemberToGroup(groupId, userId, this.currentUser.uid);
+            this.showSuccess(`${userName} has been added to the group`);
+            
+            // Hide search results and clear input
+            const memberSearch = document.getElementById('memberSearch');
+            const searchResults = document.getElementById('userSearchResults');
+            if (memberSearch) memberSearch.value = '';
+            if (searchResults) searchResults.style.display = 'none';
+            
+            // Refresh group details
+            await this.showGroupDetails(groupId);
+            await this.loadGroups();
+        } catch (error) {
+            console.error('Error adding member:', error);
+            this.showError('Failed to add member to group');
+        }
+    }
+    
+    confirmRemoveMember(groupId, memberId) {
+        this.showConfirmModal(
+            'Remove Member',
+            'Are you sure you want to remove this member from the group?',
+            () => this.removeMemberFromGroup(groupId, memberId)
+        );
+    }
+    
+    async removeMemberFromGroup(groupId, memberId) {
+        try {
+            await GroupsService.removeMember(groupId, memberId, this.currentUser.uid);
+            this.showSuccess('Member removed from group');
+            
+            // Refresh group details
+            await this.showGroupDetails(groupId);
+            await this.loadGroups();
+        } catch (error) {
+            console.error('Error removing member:', error);
+            this.showError('Failed to remove member from group');
+        }
+    }
+    
+    async promoteToAdmin(groupId, memberId) {
+        try {
+            await GroupsService.addAdmin(groupId, memberId, this.currentUser.uid);
+            this.showSuccess('Member promoted to admin');
+            
+            // Refresh group details
+            await this.showGroupDetails(groupId);
+        } catch (error) {
+            console.error('Error promoting member:', error);
+            this.showError('Failed to promote member to admin');
+        }
+    }
+    
+    async removeAdmin(groupId, memberId) {
+        try {
+            await GroupsService.removeAdmin(groupId, memberId, this.currentUser.uid);
+            this.showSuccess('Admin privileges removed');
+            
+            // Refresh group details
+            await this.showGroupDetails(groupId);
+        } catch (error) {
+            console.error('Error removing admin privileges:', error);
+            this.showError('Failed to remove admin privileges');
         }
     }
 
@@ -591,6 +934,132 @@ class GroupsManager {
         setTimeout(() => {
             notification.remove();
         }, 5000);
+    }
+    
+    async loadUsersAndGroupsForMemberManagement() {
+        try {
+            // Load all users
+            const usersQuery = await GroupsService.getAllUsers();
+            this.userSelector.innerHTML = '';
+            usersQuery.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.id;
+                option.textContent = `${user.displayName || user.email} (${user.email})`;
+                this.userSelector.appendChild(option);
+            });
+            
+            // Load user's groups
+            const userGroups = await GroupsService.getUserGroups(this.currentUser.uid);
+            this.groupSelector.innerHTML = '';
+            userGroups.forEach(group => {
+                const option = document.createElement('option');
+                option.value = group.id;
+                option.textContent = `${group.name} (${group.members.length} members)`;
+                this.groupSelector.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Error loading users and groups:', error);
+        }
+    }
+    
+    async displayCurrentMembers(group) {
+        try {
+            this.currentMembersList.innerHTML = '';
+            
+            for (const memberId of group.members) {
+                const user = await GroupsService.getUserById(memberId);
+                const isOwner = group.ownerId === memberId;
+                const isCoOwner = group.coOwners && group.coOwners.includes(memberId);
+                
+                const memberItem = document.createElement('div');
+                memberItem.className = 'member-item';
+                memberItem.innerHTML = `
+                    <div class="member-info">
+                        <div class="member-avatar">${(user.displayName || user.email)[0].toUpperCase()}</div>
+                        <span>${user.displayName || user.email}</span>
+                        ${isOwner ? '<span class="co-owner-badge">Owner</span>' : ''}
+                        ${isCoOwner ? '<span class="co-owner-badge">Co-Owner</span>' : ''}
+                    </div>
+                    ${!isOwner ? `<button class="remove-member-btn" onclick="groupsManager.removeMember('${group.id}', '${memberId}')">Remove</button>` : ''}
+                `;
+                this.currentMembersList.appendChild(memberItem);
+            }
+        } catch (error) {
+            console.error('Error displaying members:', error);
+        }
+    }
+    
+    displayCurrentCoOwners(group) {
+        this.currentCoOwners.innerHTML = '';
+        
+        if (group.coOwners && group.coOwners.length > 0) {
+            group.coOwners.forEach(async (coOwnerId) => {
+                try {
+                    const user = await GroupsService.getUserById(coOwnerId);
+                    const coOwnerItem = document.createElement('div');
+                    coOwnerItem.className = 'member-item';
+                    coOwnerItem.innerHTML = `
+                        <div class="member-info">
+                            <div class="member-avatar">${(user.displayName || user.email)[0].toUpperCase()}</div>
+                            <span>${user.displayName || user.email}</span>
+                            <span class="co-owner-badge">Co-Owner</span>
+                        </div>
+                        <button class="remove-member-btn" onclick="groupsManager.removeCoOwner('${group.id}', '${coOwnerId}')">Remove Co-Owner</button>
+                    `;
+                    this.currentCoOwners.appendChild(coOwnerItem);
+                } catch (error) {
+                    console.error('Error displaying co-owner:', error);
+                }
+            });
+        }
+    }
+    
+    async populateCoOwnerSelector(group) {
+        this.coOwnerSelector.innerHTML = '<option value="">Select a co-owner (optional)</option>';
+        
+        for (const memberId of group.members) {
+            if (memberId !== group.ownerId && (!group.coOwners || !group.coOwners.includes(memberId))) {
+                try {
+                    const user = await GroupsService.getUserById(memberId);
+                    const option = document.createElement('option');
+                    option.value = memberId;
+                    option.textContent = user.displayName || user.email;
+                    this.coOwnerSelector.appendChild(option);
+                } catch (error) {
+                    console.error('Error loading user for co-owner selector:', error);
+                }
+            }
+        }
+    }
+    
+    async removeMember(groupId, memberId) {
+        try {
+            await GroupsService.removeMemberFromGroup(groupId, memberId);
+            this.showSuccess('Member removed successfully');
+            
+            // Refresh the group details
+            const group = await GroupsService.getGroupDetails(groupId);
+            await this.displayCurrentMembers(group);
+            this.populateCoOwnerSelector(group);
+        } catch (error) {
+            console.error('Error removing member:', error);
+            this.showError('Failed to remove member');
+        }
+    }
+    
+    async removeCoOwner(groupId, coOwnerId) {
+        try {
+            await GroupsService.removeCoOwner(groupId, coOwnerId);
+            this.showSuccess('Co-owner removed successfully');
+            
+            // Refresh the group details
+            const group = await GroupsService.getGroupDetails(groupId);
+            this.displayCurrentCoOwners(group);
+            this.populateCoOwnerSelector(group);
+        } catch (error) {
+            console.error('Error removing co-owner:', error);
+            this.showError('Failed to remove co-owner');
+        }
     }
 }
 

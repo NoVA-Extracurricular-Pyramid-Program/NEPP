@@ -32,8 +32,9 @@ body {
 }
 
 .sidebar-logo img {
-  width: 250px;
-  height: 250px;
+  width: 150px;
+  height: 150px;
+  object-fit: contain;
 }
 .sidebar-nav {
   flex: 1;
@@ -102,6 +103,32 @@ body {
   margin-left: 12px;
   font-size: 2em;
 }
+
+/* Notification Badge Styles */
+.notification-icon-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.notification-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #ff4444;
+  color: white;
+  border-radius: 50%;
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  min-width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  border: 2px solid #101b28;
+}
+
 .main-content {
   flex: 1;
   padding: 40px 48px;

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Resources - NEPP</title>
+    <link rel="icon" href="../images/logo.png" type="image/png">
     <link rel="stylesheet" href="../css/styles.css">
     <link rel="stylesheet" href="../css/resources.css">
 </head>
@@ -16,6 +17,14 @@
             <div class="resources-header">
                 <h1>Resources</h1>
                 <div class="resources-controls">
+                    <div class="filter-container">
+                        <select id="fileFilter" class="filter-select">
+                            <option value="all">All Files</option>
+                            <option value="my-files">My Files</option>
+                            <option value="shared-with-me">Shared with Me</option>
+                            <option value="shared-by-me">Shared by Me</option>
+                        </select>
+                    </div>
                     <div class="search-container">
                         <input type="text" id="searchInput" placeholder="Search files and folders..." class="search-input">
                         <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">

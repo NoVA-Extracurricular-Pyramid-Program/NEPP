@@ -7,6 +7,7 @@ import {
   where,
   getDocs 
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
 
 // Get form ID from URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -21,7 +22,14 @@ let responses = [];
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
-  await loadFormAndResponses();
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      await loadFormAndResponses();
+    } else {
+      // Redirect to login if not authenticated
+      window.location.href = 'login.html';
+    }
+  });
 });
 
 async function loadFormAndResponses() {
@@ -162,6 +170,147 @@ function generateMultipleChoiceSummary(question, responses) {
   });
 
   html += `
+      </div>
+    </div>
+  `;
+
+  return html;
+}
+
+function generateCheckboxesSummary(question, responses) {
+  const optionCounts = {};
+  question.options.forEach(opt => optionCounts[opt] = 0);
+  
+  // Count checkbox selections (responses can be arrays)
+  responses.forEach(response => {
+    if (response) {
+      const selections = Array.isArray(response) ? response : [response];
+      selections.forEach(selection => {
+        if (optionCounts.hasOwnProperty(selection)) {
+          optionCounts[selection]++;
+        }
+      });
+    }
+  });
+
+  const totalResponses = responses.filter(Boolean).length;
+  
+  let html = `
+    <div class="chart-container">
+      <div class="bar-chart">
+  `;
+
+  question.options.forEach(option => {
+    const count = optionCounts[option];
+    const percentage = totalResponses ? (count / totalResponses * 100) : 0;
+    
+    html += `
+      <div class="bar" style="height: ${percentage}%; background: #3498db">
+        <span class="bar-value">${count}</span>
+        <span class="bar-label">${option}</span>
+      </div>
+    `;
+  });
+
+  html += `
+      </div>
+    </div>
+  `;
+
+  return html;
+}
+
+function generateTextSummary(responses) {
+  const validResponses = responses.filter(r => r && r.trim());
+  
+  let html = `
+    <div class="text-responses">
+      <div class="response-count">Total Responses: ${validResponses.length}</div>
+  `;
+
+  if (validResponses.length > 0) {
+    html += '<div class="text-response-list">';
+    validResponses.slice(0, 10).forEach((response, index) => {
+      html += `
+        <div class="text-response-item">
+          <span class="response-number">${index + 1}.</span>
+          <span class="response-text">${response}</span>
+        </div>
+      `;
+    });
+    
+    if (validResponses.length > 10) {
+      html += `<div class="more-responses">... and ${validResponses.length - 10} more responses</div>`;
+    }
+    
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function generateScaleSummary(question, responses) {
+  const validResponses = responses.filter(r => r !== null && r !== undefined && r !== '');
+  const scale = question.scale || { min: 1, max: 5, minLabel: 'Low', maxLabel: 'High' };
+  
+  if (validResponses.length === 0) {
+    return '<div class="no-responses">No responses yet</div>';
+  }
+
+  // Calculate statistics
+  const values = validResponses.map(r => parseFloat(r)).filter(v => !isNaN(v));
+  const sum = values.reduce((a, b) => a + b, 0);
+  const average = values.length > 0 ? sum / values.length : 0;
+  
+  // Count responses for each scale value
+  const counts = {};
+  for (let i = scale.min; i <= scale.max; i++) {
+    counts[i] = 0;
+  }
+  values.forEach(val => {
+    if (counts.hasOwnProperty(val)) {
+      counts[val]++;
+    }
+  });
+
+  let html = `
+    <div class="scale-summary">
+      <div class="scale-stats">
+        <div class="stat">
+          <span class="stat-label">Average:</span>
+          <span class="stat-value">${average.toFixed(2)}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Total Responses:</span>
+          <span class="stat-value">${values.length}</span>
+        </div>
+      </div>
+      <div class="scale-chart">
+        <div class="scale-labels">
+          <span class="scale-min-label">${scale.minLabel}</span>
+          <span class="scale-max-label">${scale.maxLabel}</span>
+        </div>
+        <div class="scale-bars">
+  `;
+
+  const maxCount = Math.max(...Object.values(counts));
+  for (let i = scale.min; i <= scale.max; i++) {
+    const count = counts[i];
+    const percentage = maxCount > 0 ? (count / maxCount * 100) : 0;
+    
+    html += `
+      <div class="scale-bar-container">
+        <div class="scale-bar" style="height: ${percentage}%">
+          <span class="scale-count">${count}</span>
+        </div>
+        <span class="scale-number">${i}</span>
+      </div>
+    `;
+  }
+
+  html += `
+        </div>
       </div>
     </div>
   `;

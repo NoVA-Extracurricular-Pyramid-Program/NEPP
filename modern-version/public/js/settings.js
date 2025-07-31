@@ -8,7 +8,7 @@ import {
   deleteUser,
   signOut
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
-import { doc, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+import { doc, updateDoc, getDoc, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
 // UI Elements
 const profileStatus = document.getElementById('profileStatus');
@@ -149,6 +149,78 @@ deleteAccountBtn?.addEventListener('click', async () => {
     } catch (error) {
       alert('Error deleting account: ' + error.message);
     }
+  }
+});
+
+// Feedback System
+const sendFeedbackBtn = document.getElementById('sendFeedback');
+const feedbackType = document.getElementById('feedbackType');
+const feedbackSubject = document.getElementById('feedbackSubject');
+const feedbackMessage = document.getElementById('feedbackMessage');
+const includeUserInfo = document.getElementById('includeUserInfo');
+
+sendFeedbackBtn?.addEventListener('click', async () => {
+  if (!auth.currentUser) {
+    alert('Please sign in to send feedback.');
+    return;
+  }
+
+  const type = feedbackType.value;
+  const subject = feedbackSubject.value.trim();
+  const message = feedbackMessage.value.trim();
+
+  if (!subject || !message) {
+    alert('Please fill in both subject and message fields.');
+    return;
+  }
+
+  try {
+    sendFeedbackBtn.disabled = true;
+    sendFeedbackBtn.textContent = 'Sending...';
+
+    const feedbackData = {
+      type: type,
+      subject: subject,
+      message: message,
+      userId: auth.currentUser.uid,
+      userEmail: auth.currentUser.email,
+      createdAt: serverTimestamp(),
+      status: 'new'
+    };
+
+    // Include user info if requested
+    if (includeUserInfo.checked) {
+      try {
+        const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+        if (userDoc.exists()) {
+          feedbackData.userInfo = {
+            displayName: userDoc.data().displayName,
+            role: userDoc.data().role,
+            department: userDoc.data().department
+          };
+        }
+      } catch (error) {
+        console.warn('Could not retrieve user info:', error);
+      }
+    }
+
+    // Save feedback to Firestore
+    await addDoc(collection(db, 'feedback'), feedbackData);
+
+    // Reset form
+    feedbackSubject.value = '';
+    feedbackMessage.value = '';
+    includeUserInfo.checked = false;
+    feedbackType.value = 'bug';
+
+    alert('Thank you for your feedback! We appreciate your input and will review it soon.');
+
+  } catch (error) {
+    console.error('Error sending feedback:', error);
+    alert('Error sending feedback. Please try again or contact support directly.');
+  } finally {
+    sendFeedbackBtn.disabled = false;
+    sendFeedbackBtn.textContent = 'Send Feedback';
   }
 });
 

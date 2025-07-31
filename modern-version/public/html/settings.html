@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Settings - NEPP</title>
+  <link rel="icon" href="../images/logo.png" type="image/png">
   <link rel="stylesheet" href="../css/styles.css">
   <link rel="stylesheet" href="../css/settings.css">
 </head>
@@ -46,6 +47,46 @@
         </div>
       </div>
 
+      <!-- Feedback Section -->
+      <div class="feedback-section">
+        <h2>📝 Feedback & Support</h2>
+        <p class="feedback-subtitle">Help us improve NEPP! Share your suggestions, report bugs, or ask questions.</p>
+        
+        <div class="feedback-container">
+          <div class="feedback-form">
+            <div class="form-group">
+              <label>Feedback Type</label>
+              <select id="feedbackType">
+                <option value="bug">🐛 Bug Report</option>
+                <option value="suggestion">💡 Suggestion</option>
+                <option value="question">❓ Question</option>
+                <option value="other">📨 Other</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Subject</label>
+              <input type="text" id="feedbackSubject" placeholder="Brief description of your feedback">
+            </div>
+
+            <div class="form-group">
+              <label>Message</label>
+              <textarea id="feedbackMessage" rows="5" placeholder="Please provide details about your feedback, bug report, or suggestion..."></textarea>
+            </div>
+
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="includeUserInfo"> Include my user information (helpful for bug reports)
+              </label>
+            </div>
+
+            <div class="feedback-actions">
+              <button id="sendFeedback" class="send-feedback-btn">Send Feedback</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Password Confirmation Modal -->
       <div id="passwordModal" class="modal" style="display: none;">
         <div class="modal-content">
@@ -63,12 +104,11 @@
 
   <footer class="site-footer">
     <div class="footer-content">
-      <div class="footer-brand">© 2020-2025 Nove Extracurricular Pyramid Program</div>
+      <div class="footer-brand">© 2025 Nova Extracurricular Pyramid Program</div>
       <div class="footer-links">
-        <a href="tsa.html">TSA</a>
-        <a href="contact.html">Contact</a>
-        <a href="#">FAQs</a> <!-- Set this to a link for a google form - Anjay -->
-        <a href="team.html">Team page</a>
+        <a href="/team">Meet the Team</a>
+        <a href="/contact">Contact</a>
+        <a href="/signup">Sign Up</a>
       </div>
     </div>
   </footer>

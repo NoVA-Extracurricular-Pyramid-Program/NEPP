@@ -3,6 +3,7 @@ import authManager from '/utils/auth-manager.js';
 class SidebarManager {
     constructor() {
         this.currentUser = null;
+        this.notificationBadge = null;
         this.init();
     }
 
@@ -10,6 +11,7 @@ class SidebarManager {
         await this.loadSidebar();
         this.setupAuthListener();
         this.highlightCurrentPage();
+        this.initializeNotificationBadge();
     }
 
     async loadSidebar() {
@@ -33,7 +35,56 @@ class SidebarManager {
         authManager.onAuthStateChanged((user) => {
             this.currentUser = user;
             this.updateSidebarUser(user);
+            
+            if (user) {
+                this.startNotificationPolling();
+            } else {
+                this.stopNotificationPolling();
+            }
         });
+    }
+
+    initializeNotificationBadge() {
+        this.notificationBadge = document.getElementById('sidebar-notification-badge');
+    }
+
+    async updateNotificationBadge() {
+        if (!this.currentUser || !this.notificationBadge) return;
+        
+        try {
+            const NotificationService = (await import('/services/notification-service.js')).default;
+            const unreadCount = await NotificationService.getUnreadCount(this.currentUser.uid);
+            
+            if (unreadCount > 0) {
+                this.notificationBadge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                this.notificationBadge.style.display = 'flex';
+            } else {
+                this.notificationBadge.style.display = 'none';
+            }
+        } catch (error) {
+            console.error('Error updating notification badge:', error);
+        }
+    }
+
+    startNotificationPolling() {
+        // Update immediately
+        this.updateNotificationBadge();
+        
+        // Update every 30 seconds
+        this.notificationInterval = setInterval(() => {
+            this.updateNotificationBadge();
+        }, 30000);
+    }
+
+    stopNotificationPolling() {
+        if (this.notificationInterval) {
+            clearInterval(this.notificationInterval);
+            this.notificationInterval = null;
+        }
+        
+        if (this.notificationBadge) {
+            this.notificationBadge.style.display = 'none';
+        }
     }
 
     updateSidebarUser(user = this.currentUser) {
@@ -58,6 +109,11 @@ class SidebarManager {
                 item.classList.add('active');
             }
         });
+    }
+
+    // Method to refresh notification badge (can be called from other modules)
+    refreshNotificationBadge() {
+        this.updateNotificationBadge();
     }
 
     // Method to get current user from other modules

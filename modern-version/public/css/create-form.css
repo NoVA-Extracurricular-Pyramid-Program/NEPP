@@ -808,3 +808,224 @@ input[type="checkbox"] {
     flex-direction: column;
   }
 }
+/* Audience Selector Styles */
+.audience-selector {
+  border: 1px solid #374a6b;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.audience-tabs {
+  display: flex;
+  border-bottom: 1px solid #374a6b;
+}
+
+.audience-tab {
+  flex: 1;
+  padding: 1rem;
+  background: transparent;
+  border: none;
+  color: #8892b0;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-weight: 500;
+}
+
+.audience-tab.active {
+  background: rgba(255, 214, 0, 0.1);
+  color: #ffd600;
+  border-bottom: 2px solid #ffd600;
+}
+
+.audience-tab:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
+}
+
+.audience-content {
+  padding: 1.5rem;
+}
+
+.audience-section {
+  display: none;
+}
+
+.audience-section.active {
+  display: block;
+}
+
+.section-info {
+  color: #8892b0;
+  font-style: italic;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background: rgba(255, 214, 0, 0.05);
+  border-left: 4px solid #ffd600;
+  border-radius: 4px;
+}
+
+.both-sections {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+.both-groups h4,
+.both-users h4 {
+  color: #ffd600;
+  margin-bottom: 1rem;
+  font-size: 1rem;
+}
+
+/* Selected items styles */
+.selected-groups,
+.selected-users {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  min-height: 3rem;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed #374a6b;
+  border-radius: 6px;
+}
+
+.selected-group,
+.selected-user {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: linear-gradient(135deg, #ffd600, #ffed4e);
+  color: #1a2438;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.selected-group button,
+.selected-user button {
+  background: none;
+  border: none;
+  color: #1a2438;
+  cursor: pointer;
+  font-weight: bold;
+  padding: 0;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.selected-group button:hover,
+.selected-user button:hover {
+  background: rgba(26, 36, 56, 0.2);
+}
+
+/* Search styles */
+.group-search input,
+.user-search input {
+  width: 100%;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid #374a6b;
+  border-radius: 6px;
+  color: white;
+  font-size: 0.9rem;
+}
+
+.group-search input:focus,
+.user-search input:focus {
+  outline: none;
+  border-color: #ffd600;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.group-search input::placeholder,
+.user-search input::placeholder {
+  color: #8892b0;
+}
+
+/* Results styles */
+.group-results,
+.user-results {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #374a6b;
+  border-radius: 6px;
+  margin-top: 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  display: none;
+}
+
+.group-results.show,
+.user-results.show {
+  display: block;
+}
+
+.group-result,
+.user-result {
+  padding: 0.75rem;
+  border-bottom: 1px solid #374a6b;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.group-result:last-child,
+.user-result:last-child {
+  border-bottom: none;
+}
+
+.group-result:hover,
+.user-result:hover {
+  background: rgba(255, 214, 0, 0.1);
+}
+
+.group-result-name,
+.user-result-name {
+  color: #ffd600;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.group-result-description,
+.user-result-email {
+  color: #8892b0;
+  font-size: 0.85rem;
+}
+
+.group-result-meta,
+.user-result-meta {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: #8892b0;
+}
+
+/* Both mode specific styles */
+#both-selection input {
+  margin-bottom: 0.5rem;
+}
+
+/* Responsive design for audience selector */
+@media (max-width: 768px) {
+  .audience-tabs {
+    flex-direction: column;
+  }
+  
+  .both-sections {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .selected-groups,
+  .selected-users {
+    min-height: 2rem;
+  }
+}

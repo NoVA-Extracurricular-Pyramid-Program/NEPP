@@ -2,11 +2,13 @@ import {
     collection, 
     addDoc, 
     getDocs, 
+    getDoc,
     deleteDoc, 
     doc, 
     query, 
     where, 
     orderBy,
+    updateDoc,
     serverTimestamp 
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 import { 
@@ -256,6 +258,129 @@ class ResourcesService {
             return files.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
         } catch (error) {
             console.error('Error fetching user files with shared:', error);
+            throw error;
+        }
+    }
+
+    // Share an existing file
+    async shareFile(fileId, shareData, userId) {
+        try {
+            console.log('Sharing file:', { fileId, shareData, userId });
+            
+            // Ensure fileId is a string
+            if (!fileId || typeof fileId !== 'string') {
+                throw new Error(`Invalid file ID: ${fileId} (type: ${typeof fileId})`);
+            }
+            
+            const fileDocRef = doc(db, this.collectionName, fileId);
+            const fileDoc = await getDoc(fileDocRef);
+            
+            if (!fileDoc.exists()) {
+                throw new Error('File not found');
+            }
+
+            const fileData = fileDoc.data();
+            
+            // Check if user owns the file
+            if (fileData.userId !== userId) {
+                throw new Error('You can only share files you own');
+            }
+
+            // Update the file with sharing information
+            const updateData = {
+                shareType: shareData.type,
+                shareDescription: shareData.description || '',
+                groupId: shareData.groupId || null,
+                sharedWith: shareData.sharedWith || [],
+                isShared: shareData.type !== 'private',
+                lastShared: serverTimestamp()
+            };
+
+            await updateDoc(fileDocRef, updateData);
+            
+            // Send notifications for file sharing
+            try {
+                await this.sendFileShareNotifications(fileId, fileData.name, shareData, userId);
+            } catch (notificationError) {
+                console.warn('Error sending file share notifications:', notificationError);
+                // Don't fail file sharing if notifications fail
+            }
+            
+            return { success: true };
+        } catch (error) {
+            console.error('Error sharing file:', error);
+            throw error;
+        }
+    }
+
+    // Send notifications for file sharing
+    async sendFileShareNotifications(fileId, fileName, shareData, sharerUserId) {
+        try {
+            // Import services dynamically to avoid circular dependencies
+            const NotificationService = (await import('/services/notification-service.js')).default;
+            
+            // Get sharer's display name
+            const userRef = doc(db, 'users', sharerUserId);
+            const userDoc = await getDoc(userRef);
+            const sharerName = userDoc.exists() ? 
+                (userDoc.data().displayName || userDoc.data().email?.split('@')[0] || 'Someone') : 
+                'Someone';
+
+            const notifications = [];
+            const recipientIds = new Set(); // Prevent duplicate notifications
+
+            // Notify directly shared users
+            if (shareData.sharedWith && shareData.sharedWith.length > 0) {
+                for (const userId of shareData.sharedWith) {
+                    if (userId !== sharerUserId && !recipientIds.has(userId)) {
+                        recipientIds.add(userId);
+                        notifications.push(
+                            NotificationService.createResourceSharedNotification(
+                                fileId,
+                                fileName,
+                                sharerUserId,
+                                sharerName,
+                                userId
+                            )
+                        );
+                    }
+                }
+            }
+
+            // Notify group members if shared with a group
+            if (shareData.groupId && shareData.type === 'group') {
+                try {
+                    const GroupsService = (await import('/services/groups-service.js')).default;
+                    const group = await GroupsService.getGroupDetails(shareData.groupId);
+                    if (group && group.members) {
+                        for (const memberId of group.members) {
+                            if (memberId !== sharerUserId && !recipientIds.has(memberId)) {
+                                recipientIds.add(memberId);
+                                notifications.push(
+                                    NotificationService.createResourceSharedNotification(
+                                        fileId,
+                                        fileName,
+                                        sharerUserId,
+                                        sharerName,
+                                        memberId
+                                    )
+                                );
+                            }
+                        }
+                    }
+                } catch (groupError) {
+                    console.warn(`Could not load group ${shareData.groupId} for notifications:`, groupError);
+                }
+            }
+
+            // Send all notifications
+            if (notifications.length > 0) {
+                await Promise.allSettled(notifications);
+                console.log(`Sent ${notifications.length} file share notifications for file: ${fileName}`);
+            }
+
+        } catch (error) {
+            console.error('Error sending file share notifications:', error);
             throw error;
         }
     }

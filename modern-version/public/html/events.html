@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Events - NEPP</title>
+    <link rel="icon" href="../images/logo.png" type="image/png">
     <link rel="stylesheet" href="../css/styles.css">
     <link rel="stylesheet" href="../css/events.css">
 </head>
@@ -94,6 +95,69 @@
             <div id="createEventModal" class="modal" style="display: none;">
                 <div class="modal-content">
                     <h2>Create New Event</h2>
+                        <!-- Target Audience Section -->
+                        <div class="form-group">
+                            <label>Target Audience</label>
+                            <div class="audience-selector">
+                                <div class="audience-tabs">
+                                    <button type="button" class="audience-tab active" data-target="groups">Groups</button>
+                                    <button type="button" class="audience-tab" data-target="individuals">Individual Users</button>
+                                    <button type="button" class="audience-tab" data-target="both">Both</button>
+                                </div>
+                                
+                                <div class="audience-content">
+                                    <div id="groups-selection" class="audience-section active">
+                                        <div class="selected-groups" id="selectedGroups">
+                                            <!-- Selected groups will appear here -->
+                                        </div>
+                                        <div class="group-search">
+                                            <input type="text" id="groupSearch" placeholder="Search groups...">
+                                            <div class="group-results" id="groupResults">
+                                                <!-- Group search results will appear here -->
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div id="individuals-selection" class="audience-section">
+                                        <div class="selected-users" id="selectedUsers">
+                                            <!-- Selected users will appear here -->
+                                        </div>
+                                        <div class="user-search">
+                                            <input type="text" id="userSearch" placeholder="Search users by name or email...">
+                                            <div class="user-results" id="userResults">
+                                                <!-- User search results will appear here -->
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div id="both-selection" class="audience-section">
+                                        <p class="section-info">You can select both groups and individual users. The event will be visible to all selected recipients.</p>
+                                        <div class="both-sections">
+                                            <div class="both-groups">
+                                                <h4>Selected Groups</h4>
+                                                <div class="selected-groups" id="selectedGroupsBoth">
+                                                    <!-- Selected groups for both mode -->
+                                                </div>
+                                                <input type="text" id="groupSearchBoth" placeholder="Search groups...">
+                                                <div class="group-results" id="groupResultsBoth">
+                                                    <!-- Group search results for both mode -->
+                                                </div>
+                                            </div>
+                                            <div class="both-users">
+                                                <h4>Selected Users</h4>
+                                                <div class="selected-users" id="selectedUsersBoth">
+                                                    <!-- Selected users for both mode -->
+                                                </div>
+                                                <input type="text" id="userSearchBoth" placeholder="Search users...">
+                                                <div class="user-results" id="userResultsBoth">
+                                                    <!-- User search results for both mode -->
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     <form id="createEventForm">
                         <div class="form-group">
                             <label for="eventTitle">Event Title *</label>
@@ -127,22 +191,6 @@
                         <div class="form-group">
                             <label for="eventLocation">Location</label>
                             <input type="text" id="eventLocation" name="eventLocation" placeholder="Event location or meeting link">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="eventGroup">Group</label>
-                            <select id="eventGroup" name="eventGroup">
-                                <option value="">Personal Event</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="eventVisibility">Visibility *</label>
-                            <select id="eventVisibility" name="eventVisibility" required>
-                                <option value="public">Public (Anyone can see)</option>
-                                <option value="group">Group Members Only</option>
-                                <option value="private">Private (Only me)</option>
-                            </select>
                         </div>
                         
                         <div class="form-actions">

@@ -120,6 +120,9 @@ class ProfileManager {
       
       // Load recent activity
       await this.loadRecentActivity();
+      
+      // Load privacy settings
+      await this.loadPrivacySettings();
     } catch (error) {
       console.error('Error loading profile:', error);
     }
@@ -305,6 +308,12 @@ class ProfileManager {
       saveBtn.addEventListener('click', () => this.saveProfile());
     }
     
+    // Save privacy settings button
+    const savePrivacyBtn = document.getElementById('savePrivacyBtn');
+    if (savePrivacyBtn) {
+      savePrivacyBtn.addEventListener('click', () => this.savePrivacySettings());
+    }
+    
     // Delete account button
     const deleteBtn = document.getElementById('deleteAccountBtn');
     if (deleteBtn) {
@@ -453,6 +462,59 @@ class ProfileManager {
       } else {
         alert('Failed to delete account: ' + error.message);
       }
+    }
+  }
+
+  // Save privacy settings
+  async savePrivacySettings() {
+    if (!this.currentUser) return;
+
+    const profileVisibility = document.getElementById('profileVisibility').value;
+    const emailVisibility = document.getElementById('emailVisibility').value;
+    const showActivityStatus = document.getElementById('showActivityStatus').checked;
+    const groupNotifications = document.getElementById('groupNotifications').checked;
+    const formNotifications = document.getElementById('formNotifications').checked;
+
+    const privacySettings = {
+      profileVisibility,
+      emailVisibility,
+      showActivityStatus,
+      groupNotifications,
+      formNotifications,
+      updatedAt: new Date()
+    };
+
+    try {
+      await setDoc(doc(db, 'users', this.currentUser.uid), {
+        privacySettings
+      }, { merge: true });
+      
+      this.showSuccessMessage('Privacy settings saved successfully!');
+    } catch (error) {
+      console.error('Error saving privacy settings:', error);
+      this.showErrorMessage('Failed to save privacy settings');
+    }
+  }
+
+  // Load privacy settings
+  async loadPrivacySettings() {
+    if (!this.currentUser) return;
+
+    try {
+      const userDocRef = doc(db, 'users', this.currentUser.uid);
+      const userDoc = await getDoc(userDocRef);
+      
+      if (userDoc.exists() && userDoc.data().privacySettings) {
+        const settings = userDoc.data().privacySettings;
+        
+        document.getElementById('profileVisibility').value = settings.profileVisibility || 'public';
+        document.getElementById('emailVisibility').value = settings.emailVisibility || 'members';
+        document.getElementById('showActivityStatus').checked = settings.showActivityStatus !== false;
+        document.getElementById('groupNotifications').checked = settings.groupNotifications !== false;
+        document.getElementById('formNotifications').checked = settings.formNotifications !== false;
+      }
+    } catch (error) {
+      console.error('Error loading privacy settings:', error);
     }
   }
 }

@@ -28,8 +28,8 @@ class EventsService {
                 date: eventData.date,
                 time: eventData.time,
                 location: eventData.location || '',
-                groupId: eventData.groupId || null,
-                visibility: eventData.visibility, // 'public', 'group', 'private'
+                selectedGroups: eventData.selectedGroups || [],
+                invitedUsers: eventData.invitedUsers || [],
                 createdBy: userId,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp()
@@ -37,80 +37,141 @@ class EventsService {
 
             const docRef = await addDoc(collection(db, this.collectionName), event);
             
-            return {
+            const createdEvent = {
                 id: docRef.id,
                 ...event,
                 createdAt: new Date(),
                 updatedAt: new Date()
             };
+
+            // Send notifications to invited users and group members
+            try {
+                await this.sendEventNotifications(createdEvent, userId);
+            } catch (notificationError) {
+                console.warn('Error sending event notifications:', notificationError);
+                // Don't fail event creation if notifications fail
+            }
+            
+            return createdEvent;
         } catch (error) {
             console.error('Error creating event:', error);
             throw error;
         }
     }
 
-    // Get events that user can see (based on visibility and group membership)
-    async getUserEvents(userId, userGroups = []) {
+    // Send notifications for new events
+    async sendEventNotifications(event, creatorId) {
         try {
-            // Get public events, user's private events, and group events for groups user is in
-            const queries = [];
+            // Import services dynamically to avoid circular dependencies
+            const NotificationService = (await import('/services/notification-service.js')).default;
+            const GroupsService = (await import('/services/groups-service.js')).default;
             
-            // Public events
-            queries.push(
-                query(
-                    collection(db, this.collectionName),
-                    where('visibility', '==', 'public'),
-                    orderBy('date', 'asc')
-                )
-            );
-            
-            // User's private events
-            queries.push(
-                query(
-                    collection(db, this.collectionName),
-                    and(
-                        where('createdBy', '==', userId),
-                        where('visibility', '==', 'private')
-                    ),
-                    orderBy('date', 'asc')
-                )
-            );
-            
-            // Group events for groups user is in
-            if (userGroups.length > 0) {
-                queries.push(
-                    query(
-                        collection(db, this.collectionName),
-                        and(
-                            where('visibility', '==', 'group'),
-                            where('groupId', 'in', userGroups.slice(0, 10)) // Firestore limit
-                        ),
-                        orderBy('date', 'asc')
-                    )
-                );
+            // Get creator's display name
+            const userRef = doc(db, 'users', creatorId);
+            const userDoc = await getDoc(userRef);
+            const creatorName = userDoc.exists() ? 
+                (userDoc.data().displayName || userDoc.data().email?.split('@')[0] || 'Unknown User') : 
+                'Unknown User';
+
+            const notifications = [];
+            const recipientIds = new Set(); // Prevent duplicate notifications
+
+            // Notify directly invited users
+            if (event.invitedUsers && event.invitedUsers.length > 0) {
+                for (const userId of event.invitedUsers) {
+                    if (userId !== creatorId && !recipientIds.has(userId)) {
+                        recipientIds.add(userId);
+                        notifications.push(
+                            NotificationService.createEventNotification(
+                                event.id,
+                                event.title,
+                                event.date,
+                                event.time,
+                                creatorId,
+                                creatorName,
+                                userId
+                            )
+                        );
+                    }
+                }
             }
 
-            // Execute all queries
-            const queryPromises = queries.map(q => getDocs(q));
-            const querySnapshots = await Promise.all(queryPromises);
+            // Notify group members
+            if (event.selectedGroups && event.selectedGroups.length > 0) {
+                for (const groupId of event.selectedGroups) {
+                    try {
+                        const group = await GroupsService.getGroupDetails(groupId);
+                        if (group && group.members) {
+                            for (const memberId of group.members) {
+                                if (memberId !== creatorId && !recipientIds.has(memberId)) {
+                                    recipientIds.add(memberId);
+                                    notifications.push(
+                                        NotificationService.createEventNotification(
+                                            event.id,
+                                            event.title,
+                                            event.date,
+                                            event.time,
+                                            creatorId,
+                                            creatorName,
+                                            memberId
+                                        )
+                                    );
+                                }
+                            }
+                        }
+                    } catch (groupError) {
+                        console.warn(`Could not load group ${groupId} for notifications:`, groupError);
+                        // Continue with other groups
+                    }
+                }
+            }
+
+            // Send all notifications
+            if (notifications.length > 0) {
+                await Promise.allSettled(notifications);
+                console.log(`Sent ${notifications.length} event notifications for event: ${event.title}`);
+            }
+
+        } catch (error) {
+            console.error('Error sending event notifications:', error);
+            throw error;
+        }
+    }
+
+    // Get events that user can see (based on invitations and group membership)
+    async getUserEvents(userId, userGroups = []) {
+        try {
+            // Get all events and filter client-side for better performance and flexibility
+            const eventsQuery = query(
+                collection(db, this.collectionName),
+                orderBy('date', 'asc')
+            );
             
-            // Combine results and remove duplicates
-            const eventsMap = new Map();
+            const querySnapshot = await getDocs(eventsQuery);
+            const events = [];
             
-            querySnapshots.forEach(querySnapshot => {
-                querySnapshot.forEach(doc => {
-                    const data = doc.data();
-                    eventsMap.set(doc.id, {
-                        id: doc.id,
-                        ...data,
-                        createdAt: data.createdAt?.toDate() || new Date(),
-                        updatedAt: data.updatedAt?.toDate() || new Date()
-                    });
-                });
+            querySnapshot.forEach(doc => {
+                const data = doc.data();
+                const event = {
+                    id: doc.id,
+                    ...data,
+                    createdAt: data.createdAt?.toDate() || new Date(),
+                    updatedAt: data.updatedAt?.toDate() || new Date()
+                };
+                
+                // Filter events based on target audience
+                const isCreator = data.createdBy === userId;
+                const isInvited = data.invitedUsers && data.invitedUsers.includes(userId);
+                const isGroupMember = data.selectedGroups && data.selectedGroups.some(groupId => 
+                    userGroups.includes(groupId)
+                );
+                
+                // Include event if user is creator, invited, or member of a selected group
+                if (isCreator || isInvited || isGroupMember) {
+                    events.push(event);
+                }
             });
             
-            // Convert to array and sort by date
-            const events = Array.from(eventsMap.values());
             return events.sort((a, b) => new Date(a.date) - new Date(b.date));
         } catch (error) {
             console.error('Error fetching user events:', error);
@@ -323,14 +384,6 @@ class EventsService {
         const eventDateTime = new Date(`${eventData.date}T${eventData.time}`);
         if (eventDateTime < new Date()) {
             throw new Error('Event cannot be scheduled in the past');
-        }
-
-        if (!['public', 'group', 'private'].includes(eventData.visibility)) {
-            throw new Error('Invalid event visibility');
-        }
-
-        if (eventData.visibility === 'group' && !eventData.groupId) {
-            throw new Error('Group must be selected for group events');
         }
 
         return true;

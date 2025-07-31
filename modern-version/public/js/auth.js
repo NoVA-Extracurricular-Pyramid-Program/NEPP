@@ -1,14 +1,40 @@
-import { AuthService } from '/services/auth-service.js';
-import { UIUtils } from '/utils/ui-utils.js';
-import { CONSTANTS } from '/config/constants.js';
 import { auth, db } from '/config/firebase-config.js';
 import { 
   signInWithEmailAndPassword,
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithPopup,
+  createUserWithEmailAndPassword,
+  updateProfile,
+  sendPasswordResetEmail,
+  onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
 import { doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+
+// Password validation function
+function validatePassword(password) {
+  const minLength = 6;
+  const hasLetter = /[a-zA-Z]/.test(password);
+  const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+  
+  const errors = [];
+  
+  if (password.length < minLength) {
+    errors.push(`Password must be at least ${minLength} characters long`);
+  }
+  
+  if (!hasLetter) {
+    errors.push('Password must contain at least one letter');
+  }
+  
+  if (!hasSpecialChar) {
+    errors.push('Password must contain at least one special character (!@#$%^&*()_+-=[]{}|;:,.<>?)');
+  }
+  
+  return {
+    isValid: errors.length === 0,
+    errors: errors
+  };
+}
 
 // Handle navigation UI
 const loginLink = document.getElementById('login-link');
@@ -37,15 +63,73 @@ const loginForm = document.getElementById('login-form');
 if (loginForm) {
   loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const email = document.getElementById('email').value;
+    const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
     const authMessage = document.getElementById('auth-message');
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    
+    // Clear previous messages
+    authMessage.style.display = 'none';
+    
+    // Basic validation
+    if (!email || !password) {
+      authMessage.textContent = 'Please enter both email and password';
+      authMessage.style.color = '#ff3860';
+      authMessage.style.display = 'block';
+      return;
+    }
     
     try {
+      // Show loading state
+      const originalText = submitBtn.textContent;
+      submitBtn.textContent = 'Signing In...';
+      submitBtn.disabled = true;
+      
       await signInWithEmailAndPassword(auth, email, password);
-      window.location.href = 'dashboard.html';
+      
+      // Show success message
+      authMessage.textContent = 'Successfully signed in! Redirecting...';
+      authMessage.style.color = '#00d1b2';
+      authMessage.style.display = 'block';
+      
+      // Redirect after a short delay
+      setTimeout(() => {
+        window.location.href = 'html/dashboard.html';
+      }, 1500);
+      
     } catch (error) {
-      authMessage.textContent = error.message;
+      console.error('Login error:', error);
+      
+      // Reset button
+      submitBtn.textContent = originalText;
+      submitBtn.disabled = false;
+      
+      // Show user-friendly error messages
+      let errorMessage = 'Sign in failed';
+      
+      switch (error.code) {
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+        case 'auth/invalid-credential':
+          errorMessage = 'Invalid email or password';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Invalid email address';
+          break;
+        case 'auth/user-disabled':
+          errorMessage = 'This account has been disabled';
+          break;
+        case 'auth/too-many-requests':
+          errorMessage = 'Too many failed attempts. Please try again later';
+          break;
+        case 'auth/network-request-failed':
+          errorMessage = 'Network error. Please check your connection';
+          break;
+        default:
+          errorMessage = error.message;
+      }
+      
+      authMessage.textContent = errorMessage;
       authMessage.style.color = '#ff3860';
       authMessage.style.display = 'block';
     }
@@ -57,12 +141,33 @@ const signupForm = document.getElementById('signup-form');
 if (signupForm) {
   signupForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const name = document.getElementById('name').value;
-    const email = document.getElementById('email').value;
+    const name = document.getElementById('name').value.trim();
+    const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
     const confirmPassword = document.getElementById('confirm-password').value;
     const authMessage = document.getElementById('auth-message');
 
+    // Clear previous messages
+    authMessage.style.display = 'none';
+
+    // Validate name
+    if (!name) {
+      authMessage.textContent = 'Full name is required';
+      authMessage.style.color = '#ff3860';
+      authMessage.style.display = 'block';
+      return;
+    }
+
+    // Validate password
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.isValid) {
+      authMessage.innerHTML = 'Password requirements:<br>• ' + passwordValidation.errors.join('<br>• ');
+      authMessage.style.color = '#ff3860';
+      authMessage.style.display = 'block';
+      return;
+    }
+
+    // Check password confirmation
     if (password !== confirmPassword) {
       authMessage.textContent = 'Passwords do not match';
       authMessage.style.color = '#ff3860';
@@ -71,6 +176,12 @@ if (signupForm) {
     }
 
     try {
+      // Show loading state
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      const originalText = submitBtn.textContent;
+      submitBtn.textContent = 'Creating Account...';
+      submitBtn.disabled = true;
+
       // Create the user account
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       console.log('User created successfully:', userCredential.user.uid);
@@ -89,13 +200,120 @@ if (signupForm) {
       });
       console.log('Firestore document created successfully');
 
-      // Redirect to dashboard
-      window.location.href = 'dashboard.html';
+      // Show success message
+      authMessage.textContent = 'Account created successfully! Redirecting...';
+      authMessage.style.color = '#00d1b2';
+      authMessage.style.display = 'block';
+
+      // Redirect to dashboard after a short delay
+      setTimeout(() => {
+        window.location.href = 'html/dashboard.html';
+      }, 2000);
+
     } catch (error) {
       console.error('Signup error:', error);
-      authMessage.textContent = `Error: ${error.code} - ${error.message}`;
+      
+      // Reset button
+      submitBtn.textContent = originalText;
+      submitBtn.disabled = false;
+      
+      // Show user-friendly error messages
+      let errorMessage = 'An error occurred during signup';
+      
+      switch (error.code) {
+        case 'auth/email-already-in-use':
+          errorMessage = 'An account with this email already exists';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Invalid email address';
+          break;
+        case 'auth/weak-password':
+          errorMessage = 'Password is too weak';
+          break;
+        case 'auth/network-request-failed':
+          errorMessage = 'Network error. Please check your connection';
+          break;
+        default:
+          errorMessage = error.message;
+      }
+      
+      authMessage.textContent = errorMessage;
       authMessage.style.color = '#ff3860';
       authMessage.style.display = 'block';
+    }
+  });
+}
+
+// Forgot Password functionality
+const forgotPasswordLink = document.getElementById('forgot-password');
+if (forgotPasswordLink) {
+  forgotPasswordLink.addEventListener('click', async (e) => {
+    e.preventDefault();
+    
+    // Get email from the login form if available
+    const emailInput = document.getElementById('email');
+    let email = emailInput ? emailInput.value.trim() : '';
+    
+    // If no email in form, prompt user for email
+    if (!email) {
+      email = prompt('Please enter your email address to reset your password:');
+    }
+    
+    if (!email) {
+      alert('Email address is required to reset password.');
+      return;
+    }
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      alert('Please enter a valid email address.');
+      return;
+    }
+    
+    try {
+      // Change link text to show loading
+      const originalText = forgotPasswordLink.textContent;
+      forgotPasswordLink.textContent = 'Sending...';
+      forgotPasswordLink.style.pointerEvents = 'none';
+      
+      await sendPasswordResetEmail(auth, email);
+      
+      // Show success message
+      alert(`Password reset email sent to ${email}! Please check your inbox and follow the instructions to reset your password.`);
+      
+      // Reset link text
+      forgotPasswordLink.textContent = originalText;
+      forgotPasswordLink.style.pointerEvents = 'auto';
+      
+    } catch (error) {
+      console.error('Password reset error:', error);
+      
+      // Reset link text
+      forgotPasswordLink.textContent = originalText;
+      forgotPasswordLink.style.pointerEvents = 'auto';
+      
+      // Show user-friendly error messages
+      let errorMessage = 'Failed to send password reset email';
+      
+      switch (error.code) {
+        case 'auth/user-not-found':
+          errorMessage = 'No account found with this email address';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Invalid email address';
+          break;
+        case 'auth/network-request-failed':
+          errorMessage = 'Network error. Please check your connection';
+          break;
+        case 'auth/too-many-requests':
+          errorMessage = 'Too many password reset attempts. Please try again later';
+          break;
+        default:
+          errorMessage = error.message;
+      }
+      
+      alert(errorMessage);
     }
   });
 }
@@ -227,7 +445,7 @@ if (googleSignInButton) {
       }
 
       // Redirect to dashboard
-      window.location.href = '/dashboard.html';
+      window.location.href = '/html/dashboard.html';
     } catch (error) {
       console.error('Error signing in with Google:', error);
       const authMessage = document.getElementById('auth-message');

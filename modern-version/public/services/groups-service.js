@@ -424,6 +424,166 @@ class GroupsService {
         }
     }
 
+    // Add member to group (admin/owner only)
+    async addMemberToGroup(groupId, userIdToAdd, addedByUserId = null) {
+        try {
+            const groupRef = doc(db, this.collectionName, groupId);
+            const groupDoc = await getDoc(groupRef);
+            
+            if (!groupDoc.exists()) {
+                throw new Error('Group not found');
+            }
+
+            const groupData = groupDoc.data();
+            
+            // Check if user is already a member
+            if (groupData.members.includes(userIdToAdd)) {
+                throw new Error('User is already a member of this group');
+            }
+
+            // Check max members limit
+            if (groupData.maxMembers && groupData.members.length >= groupData.maxMembers) {
+                throw new Error('Group has reached maximum member limit');
+            }
+
+            await updateDoc(groupRef, {
+                members: arrayUnion(userIdToAdd),
+                updatedAt: serverTimestamp()
+            });
+
+            // Send notification to the added user
+            if (addedByUserId && addedByUserId !== userIdToAdd) {
+                try {
+                    await this.sendGroupInviteNotification(groupId, groupData.name, addedByUserId, userIdToAdd);
+                } catch (notificationError) {
+                    console.warn('Error sending group invite notification:', notificationError);
+                    // Don't fail member addition if notification fails
+                }
+            }
+
+            return true;
+        } catch (error) {
+            console.error('Error adding member:', error);
+            throw error;
+        }
+    }
+
+    // Send notification for group invitation
+    async sendGroupInviteNotification(groupId, groupName, addedByUserId, newMemberId) {
+        try {
+            // Import services dynamically to avoid circular dependencies
+            const NotificationService = (await import('/services/notification-service.js')).default;
+            
+            // Get adder's display name
+            const userRef = doc(db, 'users', addedByUserId);
+            const userDoc = await getDoc(userRef);
+            const adderName = userDoc.exists() ? 
+                (userDoc.data().displayName || userDoc.data().email?.split('@')[0] || 'Someone') : 
+                'Someone';
+
+            await NotificationService.createGroupInviteNotification(
+                groupId,
+                groupName,
+                addedByUserId,
+                adderName,
+                newMemberId
+            );
+
+            console.log(`Sent group invite notification for group: ${groupName}`);
+
+        } catch (error) {
+            console.error('Error sending group invite notification:', error);
+            throw error;
+        }
+    }
+
+    // Get all users for member search
+    async getAllUsers() {
+        try {
+            const snapshot = await getDocs(collection(db, 'users'));
+            const users = [];
+            snapshot.forEach(doc => {
+                users.push({ id: doc.id, ...doc.data() });
+            });
+            return users;
+        } catch (error) {
+            console.error('Error fetching users:', error);
+            throw error;
+        }
+    }
+    
+    // Get user by ID
+    async getUserById(userId) {
+        try {
+            const userDoc = await getDoc(doc(db, 'users', userId));
+            if (userDoc.exists()) {
+                return { id: userDoc.id, ...userDoc.data() };
+            }
+            throw new Error('User not found');
+        } catch (error) {
+            console.error('Error fetching user:', error);
+            throw error;
+        }
+    }
+    
+    // Remove member from group
+    async removeMemberFromGroup(groupId, memberId) {
+        try {
+            const groupRef = doc(db, this.collectionName, groupId);
+            await updateDoc(groupRef, {
+                members: arrayRemove(memberId),
+                admins: arrayRemove(memberId), // Also remove from admins if they were one
+                coOwners: arrayRemove(memberId), // Also remove from co-owners if they were one
+                updatedAt: serverTimestamp()
+            });
+        } catch (error) {
+            console.error('Error removing member:', error);
+            throw error;
+        }
+    }
+    
+    // Add co-owner to group
+    async addCoOwner(groupId, userId) {
+        try {
+            const groupRef = doc(db, this.collectionName, groupId);
+            await updateDoc(groupRef, {
+                coOwners: arrayUnion(userId),
+                updatedAt: serverTimestamp()
+            });
+        } catch (error) {
+            console.error('Error adding co-owner:', error);
+            throw error;
+        }
+    }
+    
+    // Remove co-owner from group
+    async removeCoOwner(groupId, userId) {
+        try {
+            const groupRef = doc(db, this.collectionName, groupId);
+            await updateDoc(groupRef, {
+                coOwners: arrayRemove(userId),
+                updatedAt: serverTimestamp()
+            });
+        } catch (error) {
+            console.error('Error removing co-owner:', error);
+            throw error;
+        }
+    }
+    
+    // Add multiple members to group
+    async addMembersToGroup(groupId, memberIds) {
+        try {
+            const groupRef = doc(db, this.collectionName, groupId);
+            await updateDoc(groupRef, {
+                members: arrayUnion(...memberIds),
+                updatedAt: serverTimestamp()
+            });
+        } catch (error) {
+            console.error('Error adding members:', error);
+            throw error;
+        }
+    }
+
     // Search groups by name
     searchGroups(groups, searchTerm) {
         if (!searchTerm.trim()) return groups;
@@ -438,8 +598,9 @@ class GroupsService {
     // Get user role in group
     getUserRole(group, userId) {
         if (group.ownerId === userId) return 'owner';
-        if (group.admins.includes(userId)) return 'admin';
-        if (group.members.includes(userId)) return 'member';
+        if (group.coOwners && group.coOwners.includes(userId)) return 'co-owner';
+        if (group.admins && group.admins.includes(userId)) return 'admin';
+        if (group.members && group.members.includes(userId)) return 'member';
         return null;
     }
 

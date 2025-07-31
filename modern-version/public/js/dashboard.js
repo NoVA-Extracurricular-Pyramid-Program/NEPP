@@ -1,6 +1,6 @@
 import { auth, db } from '/config/firebase-config.js';
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
-import { collection, getDocs, query, orderBy, limit, where } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+import { collection, getDocs, query, orderBy, limit, where, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 import { CalendarWidget } from '/components/calendar-widget.js';
 import { initializeAuth } from '/utils/auth-utils.js';
 
@@ -11,12 +11,50 @@ let calendar = null;
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     currentUser = user;
+    await updateUserDisplayName(user);
     await loadDashboardData();
     initializeCalendar();
   } else {
     window.location.href = '/login.html';
   }
 });
+
+async function updateUserDisplayName(user) {
+  try {
+    // First try to get user data from Firestore
+    const userDoc = await getDoc(doc(db, 'users', user.uid));
+    let displayName = 'NEPP User';
+    
+    if (userDoc.exists()) {
+      const userData = userDoc.data();
+      if (userData.firstName && userData.lastName) {
+        displayName = `${userData.firstName} ${userData.lastName}`;
+      } else if (userData.firstName) {
+        displayName = userData.firstName;
+      } else if (userData.lastName) {
+        displayName = userData.lastName;
+      }
+    }
+    
+    // Fallback to auth display name or email
+    if (displayName === 'NEPP User') {
+      displayName = user.displayName || user.email?.split('@')[0] || 'NEPP User';
+    }
+    
+    // Update the display name element
+    const userDisplayElement = document.getElementById('user-display-name');
+    if (userDisplayElement) {
+      userDisplayElement.textContent = displayName;
+    }
+  } catch (error) {
+    console.error('Error updating user display name:', error);
+    // Fallback to basic auth info
+    const userDisplayElement = document.getElementById('user-display-name');
+    if (userDisplayElement) {
+      userDisplayElement.textContent = user.displayName || user.email?.split('@')[0] || 'NEPP User';
+    }
+  }
+}
 
 async function loadDashboardData() {
   try {

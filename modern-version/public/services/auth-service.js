@@ -15,6 +15,15 @@ import {
   getDocs
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
+// Import notification service for welcome messages
+let NotificationService;
+try {
+  const module = await import('/services/notification-service.js');
+  NotificationService = module.default;
+} catch (error) {
+  console.warn('NotificationService not available during auth:', error);
+}
+
 const AuthService = {
   async login(email, password) {
     return await signInWithEmailAndPassword(auth, email, password);
@@ -32,6 +41,17 @@ const AuthService = {
       department: userData.department || '',
       createdAt: new Date().toISOString()
     });
+    
+    // Send welcome notification to new user
+    if (NotificationService) {
+      try {
+        await NotificationService.sendWelcomeNotification(userCredential.user.uid, email);
+        console.log('Welcome notification sent to new user');
+      } catch (error) {
+        console.warn('Failed to send welcome notification:', error);
+        // Don't throw error - registration should still succeed
+      }
+    }
     
     return userCredential;
   },

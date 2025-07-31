@@ -38,32 +38,47 @@ class AnnouncementsManager {
   initializeElements() {
     this.createBtn = document.querySelector('.create-announcement');
     this.popup = document.querySelector('.announcement-popup');
-    this.popupContent = document.querySelector('.popup-content');
-    this.messageInput = document.querySelector('.popup-message');
-    this.errorDiv = document.querySelector('.popup-error');
+    this.overlay = document.querySelector('.overlay');
+    this.closeBtn = document.querySelector('.close-popup');
     this.submitBtn = document.querySelector('.popup-submit');
+    this.audienceRadios = document.querySelectorAll('input[name="audience"]');
+    
+    // Additional elements that will be available after DOM load
+    this.messageInput = document.querySelector('#popupMessage');
     this.cancelBtn = document.querySelector('.popup-cancel');
+    this.popupContent = document.querySelector('.popup-content');
+    this.errorDiv = document.querySelector('.popup-error');
     this.announcementsList = document.querySelector('.announcements-list');
-    
-    // Debug logging
-    console.log('Announcements elements found:', {
-      createBtn: !!this.createBtn,
-      popup: !!this.popup,
-      messageInput: !!this.messageInput,
-      announcementsList: !!this.announcementsList
-    });
-    
-    // Add group selection to popup
-    this.addGroupSelectionToPopup();
+
+    // Note: initializeAudienceSelector() and addGroupSelectionToPopup() 
+    // will be called after authentication in setupAuthListener()
   }
 
   addGroupSelectionToPopup() {
-    const groupSelectionHTML = `
-      <div class="form-group">
-        <label for="announcementGroup">Target Group:</label>
-        <select id="announcementGroup" class="form-select">
-          <option value="">Select a group...</option>
-        </select>
+    // Ensure user is authenticated before proceeding
+    if (!this.currentUser || !this.currentUser.uid) {
+      console.log('User not authenticated yet, skipping audience selector initialization');
+      return;
+    }
+    
+    // Make sure messageInput exists before proceeding
+    if (!this.messageInput) {
+      this.messageInput = document.querySelector('#popupMessage');
+      if (!this.messageInput) {
+        console.error('Message input not found, cannot initialize audience selector');
+        return;
+      }
+    }
+    
+    // Get user's display name for personalized greeting
+    const userName = this.currentUser.displayName || this.currentUser.email?.split('@')[0] || 'User';
+    
+    const userGreetingAndFormHTML = `
+      <div class="user-greeting" style="margin-bottom: 1rem; padding: 0.75rem; background: rgba(255, 214, 0, 0.1); border: 1px solid #ffd600; border-radius: 8px;">
+        <p style="margin: 0; color: #ffd600; font-weight: 500;">
+          <span style="color: #ffffff;">Hello, </span>${userName}! 
+          <span style="color: #ffffff;">What would you like to announce?</span>
+        </p>
       </div>
       <div class="form-group">
         <label for="announcementTitle">Title:</label>
@@ -76,26 +91,361 @@ class AnnouncementsManager {
     `;
     
     // Insert before textarea
-    this.messageInput.insertAdjacentHTML('beforebegin', groupSelectionHTML);
+    this.messageInput.insertAdjacentHTML('beforebegin', userGreetingAndFormHTML);
     
-    this.groupSelect = document.getElementById('announcementGroup');
     this.titleInput = document.getElementById('announcementTitle');
     this.scheduledDateInput = document.getElementById('scheduledDate');
+    
+    // Initialize audience selector now that user is authenticated
+    this.initializeAudienceSelector();
+  }
+
+  initializeAudienceSelector() {
+    this.selectedGroups = new Set();
+    this.selectedUsers = new Set();
+    this.allGroups = [];
+    this.allUsers = [];
+    
+    // Get references to audience selector elements
+    this.audienceSelector = document.querySelector('.audience-selector');
+    this.audienceTabs = document.querySelectorAll('.audience-tab');
+    this.audienceSections = document.querySelectorAll('.audience-section');
+    
+    // Group elements
+    this.selectedGroupsContainer = document.querySelector('#selectedGroups');
+    this.groupSearch = document.querySelector('#groupSearch');
+    this.groupResults = document.querySelector('#groupResults');
+    
+    // User elements
+    this.selectedUsersContainer = document.querySelector('#selectedUsers');
+    this.userSearch = document.querySelector('#userSearch');
+    this.userResults = document.querySelector('#userResults');
+    
+    // Both mode elements
+    this.bothGroupsContainer = document.querySelector('#selectedGroupsBoth');
+    this.bothUsersContainer = document.querySelector('#selectedUsersBoth');
+    this.bothGroupSearch = document.querySelector('#groupSearchBoth');
+    this.bothUserSearch = document.querySelector('#userSearchBoth');
+    this.bothGroupResults = document.querySelector('#groupResultsBoth');
+    this.bothUserResults = document.querySelector('#userResultsBoth');
+    
+    this.bindAudienceEvents();
+    this.loadGroupsAndUsers();
+  }
+
+  bindAudienceEvents() {
+    // Tab switching
+    this.audienceTabs.forEach(tab => {
+      tab.addEventListener('click', () => this.switchAudienceTab(tab.dataset.target));
+    });
+    
+    // Group search events
+    if (this.groupSearch) {
+      this.groupSearch.addEventListener('input', (e) => this.searchGroups(e.target.value));
+      this.groupSearch.addEventListener('focus', () => this.showGroupResults());
+    }
+    
+    if (this.bothGroupSearch) {
+      this.bothGroupSearch.addEventListener('input', (e) => this.searchGroups(e.target.value, 'both'));
+      this.bothGroupSearch.addEventListener('focus', () => this.showGroupResults('both'));
+    }
+    
+    // User search events
+    if (this.userSearch) {
+      this.userSearch.addEventListener('input', (e) => this.searchUsers(e.target.value));
+      this.userSearch.addEventListener('focus', () => this.showUserResults());
+    }
+    
+    if (this.bothUserSearch) {
+      this.bothUserSearch.addEventListener('input', (e) => this.searchUsers(e.target.value, 'both'));
+      this.bothUserSearch.addEventListener('focus', () => this.showUserResults('both'));
+    }
+    
+    // Hide results when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.group-search') && !e.target.closest('.group-results')) {
+        this.hideGroupResults();
+      }
+      if (!e.target.closest('.user-search') && !e.target.closest('.user-results')) {
+        this.hideUserResults();
+      }
+    });
+  }
+
+  async loadGroupsAndUsers() {
+    try {
+      // Check if user is authenticated
+      if (!this.currentUser || !this.currentUser.uid) {
+        console.log('User not authenticated yet, skipping group and user loading');
+        return;
+      }
+
+      // Load all groups user has access to
+      const groupsQuery = query(
+        collection(db, 'groups'),
+        where('members', 'array-contains', this.currentUser.uid)
+      );
+      const groupsSnapshot = await getDocs(groupsQuery);
+      this.allGroups = [];
+      groupsSnapshot.forEach(doc => {
+        this.allGroups.push({ id: doc.id, ...doc.data() });
+      });
+      
+      // Load all users
+      const usersSnapshot = await getDocs(collection(db, 'users'));
+      this.allUsers = [];
+      usersSnapshot.forEach(doc => {
+        const userData = doc.data();
+        // Don't include current user in selection
+        if (doc.id !== this.currentUser.uid) {
+          this.allUsers.push({ id: doc.id, ...userData });
+        }
+      });
+    } catch (error) {
+      console.error('Error loading groups and users:', error);
+    }
+  }
+
+  switchAudienceTab(tabName) {
+    // Update active tab
+    this.audienceTabs.forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.target === tabName);
+    });
+    
+    // Update active section - map the tab names to actual section IDs
+    const sectionIdMap = {
+      'groups': 'groups-selection',
+      'individuals': 'individuals-selection', 
+      'both': 'both-selection'
+    };
+    
+    this.audienceSections.forEach(section => {
+      section.classList.toggle('active', section.id === sectionIdMap[tabName]);
+    });
+    
+    // Clear search inputs and hide results
+    this.clearSearches();
+  }
+
+  clearSearches() {
+    if (this.groupSearch) this.groupSearch.value = '';
+    if (this.userSearch) this.userSearch.value = '';
+    if (this.bothGroupSearch) this.bothGroupSearch.value = '';
+    if (this.bothUserSearch) this.bothUserSearch.value = '';
+    this.hideGroupResults();
+    this.hideUserResults();
+  }
+
+  searchGroups(query, mode = 'groups') {
+    if (!query.trim()) {
+      this.hideGroupResults(mode);
+      return;
+    }
+    
+    const filteredGroups = this.allGroups.filter(group =>
+      group.name.toLowerCase().includes(query.toLowerCase()) ||
+      group.description?.toLowerCase().includes(query.toLowerCase())
+    );
+    
+    this.displayGroupResults(filteredGroups, mode);
+  }
+
+  displayGroupResults(groups, mode = 'groups') {
+    const resultsContainer = mode === 'both' ? this.bothGroupResults : this.groupResults;
+    if (!resultsContainer) return;
+    
+    if (groups.length === 0) {
+      resultsContainer.innerHTML = '<div class="no-results">No groups found</div>';
+    } else {
+      resultsContainer.innerHTML = groups.map(group => `
+        <div class="group-result" onclick="announcementsManager.selectGroup('${group.id}', '${mode}')">
+          <div class="group-result-name">${group.name}</div>
+          <div class="group-result-description">${group.description || 'No description'}</div>
+          <div class="group-result-meta">
+            <span>${group.members?.length || 0} members</span>
+          </div>
+        </div>
+      `).join('');
+    }
+    
+    this.showGroupResults(mode);
+  }
+
+  searchUsers(query, mode = 'users') {
+    if (!query.trim()) {
+      this.hideUserResults(mode);
+      return;
+    }
+    
+    const filteredUsers = this.allUsers.filter(user =>
+      user.name?.toLowerCase().includes(query.toLowerCase()) ||
+      user.email?.toLowerCase().includes(query.toLowerCase())
+    );
+    
+    this.displayUserResults(filteredUsers, mode);
+  }
+
+  displayUserResults(users, mode = 'users') {
+    const resultsContainer = mode === 'both' ? this.bothUserResults : this.userResults;
+    if (!resultsContainer) return;
+    
+    if (users.length === 0) {
+      resultsContainer.innerHTML = '<div class="no-results">No users found</div>';
+    } else {
+      resultsContainer.innerHTML = users.map(user => `
+        <div class="user-result" onclick="announcementsManager.selectUser('${user.id}', '${mode}')">
+          <div class="user-result-name">${user.name || user.email}</div>
+          <div class="user-result-email">${user.email}</div>
+        </div>
+      `).join('');
+    }
+    
+    this.showUserResults(mode);
+  }
+
+  selectGroup(groupId, mode = 'groups') {
+    this.selectedGroups.add(groupId);
+    this.updateSelectedGroups(mode);
+    this.clearGroupSearch(mode);
+  }
+
+  selectUser(userId, mode = 'users') {
+    this.selectedUsers.add(userId);
+    this.updateSelectedUsers(mode);
+    this.clearUserSearch(mode);
+  }
+
+  removeGroup(groupId) {
+    this.selectedGroups.delete(groupId);
+    this.updateSelectedGroups();
+    this.updateSelectedGroups('both');
+  }
+
+  removeUser(userId) {
+    this.selectedUsers.delete(userId);
+    this.updateSelectedUsers();
+    this.updateSelectedUsers('both');
+  }
+
+  updateSelectedGroups(mode = 'groups') {
+    const containers = mode === 'both' ? [this.bothGroupsContainer] : 
+                     mode === 'groups' ? [this.selectedGroupsContainer] : 
+                     [this.selectedGroupsContainer, this.bothGroupsContainer];
+    
+    containers.forEach(container => {
+      if (!container) return;
+      
+      if (this.selectedGroups.size === 0) {
+        container.innerHTML = '<span class="placeholder">No groups selected</span>';
+      } else {
+        container.innerHTML = Array.from(this.selectedGroups).map(groupId => {
+          const group = this.allGroups.find(g => g.id === groupId);
+          return `
+            <div class="selected-group">
+              <span>${group?.name || 'Unknown Group'}</span>
+              <button onclick="announcementsManager.removeGroup('${groupId}')" type="button">×</button>
+            </div>
+          `;
+        }).join('');
+      }
+    });
+  }
+
+  updateSelectedUsers(mode = 'users') {
+    const containers = mode === 'both' ? [this.bothUsersContainer] : 
+                     mode === 'users' ? [this.selectedUsersContainer] : 
+                     [this.selectedUsersContainer, this.bothUsersContainer];
+    
+    containers.forEach(container => {
+      if (!container) return;
+      
+      if (this.selectedUsers.size === 0) {
+        container.innerHTML = '<span class="placeholder">No users selected</span>';
+      } else {
+        container.innerHTML = Array.from(this.selectedUsers).map(userId => {
+          const user = this.allUsers.find(u => u.id === userId);
+          return `
+            <div class="selected-user">
+              <span>${user?.name || user?.email || 'Unknown User'}</span>
+              <button onclick="announcementsManager.removeUser('${userId}')" type="button">×</button>
+            </div>
+          `;
+        }).join('');
+      }
+    });
+  }
+
+  showGroupResults(mode = 'groups') {
+    const resultsContainer = mode === 'both' ? this.bothGroupResults : this.groupResults;
+    if (resultsContainer) resultsContainer.classList.add('show');
+  }
+
+  hideGroupResults(mode = null) {
+    if (!mode || mode === 'groups') {
+      if (this.groupResults) this.groupResults.classList.remove('show');
+    }
+    if (!mode || mode === 'both') {
+      if (this.bothGroupResults) this.bothGroupResults.classList.remove('show');
+    }
+  }
+
+  showUserResults(mode = 'users') {
+    const resultsContainer = mode === 'both' ? this.bothUserResults : this.userResults;
+    if (resultsContainer) resultsContainer.classList.add('show');
+  }
+
+  hideUserResults(mode = null) {
+    if (!mode || mode === 'users') {
+      if (this.userResults) this.userResults.classList.remove('show');
+    }
+    if (!mode || mode === 'both') {
+      if (this.bothUserResults) this.bothUserResults.classList.remove('show');
+    }
+  }
+
+  clearGroupSearch(mode = 'groups') {
+    if (mode === 'both' && this.bothGroupSearch) {
+      this.bothGroupSearch.value = '';
+      this.hideGroupResults('both');
+    } else if (this.groupSearch) {
+      this.groupSearch.value = '';
+      this.hideGroupResults('groups');
+    }
+  }
+
+  clearUserSearch(mode = 'users') {
+    if (mode === 'both' && this.bothUserSearch) {
+      this.bothUserSearch.value = '';
+      this.hideUserResults('both');
+    } else if (this.userSearch) {
+      this.userSearch.value = '';
+      this.hideUserResults('users');
+    }
   }
 
   bindEvents() {
-    this.createBtn.addEventListener('click', () => this.showCreatePopup());
-    this.cancelBtn.addEventListener('click', () => this.hidePopup());
-    this.submitBtn.addEventListener('click', () => this.handleSubmit());
+    if (this.createBtn) {
+      this.createBtn.addEventListener('click', () => this.showCreatePopup());
+    }
     
-    // Close popup when clicking outside
-    this.popup.addEventListener('click', (e) => {
-      if (e.target === this.popup) this.hidePopup();
-    });
+    if (this.cancelBtn) {
+      this.cancelBtn.addEventListener('click', () => this.hidePopup());
+    }
+    
+    if (this.submitBtn) {
+      this.submitBtn.addEventListener('click', () => this.handleSubmit());
+    }
+    
+    if (this.popup) {
+      // Close popup when clicking outside
+      this.popup.addEventListener('click', (e) => {
+        if (e.target === this.popup) this.hidePopup();
+      });
+    }
     
     // Escape key to close popup
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this.popup.style.display !== 'none') {
+      if (e.key === 'Escape' && this.popup && this.popup.style.display !== 'none') {
         this.hidePopup();
       }
     });
@@ -105,13 +455,43 @@ class AnnouncementsManager {
     onAuthStateChanged(auth, async (user) => {
       if (user) {
         this.currentUser = user;
+        
+        // Now that user is authenticated, initialize audience selector components
+        this.addGroupSelectionToPopup();
+        
         await this.loadUserGroups();
         await this.loadAnnouncements();
+        
+        // Check for announcement parameter in URL (for notifications)
+        this.checkForAnnouncementParameter();
       } else {
         // Redirect to login if not authenticated
         window.location.href = '/login.html';
       }
     });
+  }
+
+  checkForAnnouncementParameter() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const announcementId = urlParams.get('announcement');
+    
+    if (announcementId) {
+      // Scroll to the announcement after a short delay to ensure everything is loaded
+      setTimeout(() => {
+        const announcementElement = document.querySelector(`[data-announcement-id="${announcementId}"]`);
+        if (announcementElement) {
+          announcementElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Highlight the announcement briefly
+          announcementElement.style.backgroundColor = 'rgba(255, 214, 0, 0.2)';
+          setTimeout(() => {
+            announcementElement.style.backgroundColor = '';
+          }, 3000);
+        }
+        // Clean up the URL parameter
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, newUrl);
+      }, 1000);
+    }
   }
 
   async loadUserGroups() {
@@ -124,17 +504,9 @@ class AnnouncementsManager {
       const groupsSnapshot = await getDocs(groupsQuery);
       this.userGroups = [];
       
-      // Populate group select
-      this.groupSelect.innerHTML = '<option value="">All groups</option>';
-      
       groupsSnapshot.forEach(doc => {
         const group = doc.data();
         this.userGroups.push({ id: doc.id, ...group });
-        
-        const option = document.createElement('option');
-        option.value = doc.id;
-        option.textContent = group.name;
-        this.groupSelect.appendChild(option);
       });
     } catch (error) {
       console.error('Error loading user groups:', error);
@@ -194,9 +566,36 @@ class AnnouncementsManager {
 
     this.announcementsList.innerHTML = this.announcements.map(announcement => {
       const isOwner = announcement.createdBy === this.currentUser?.uid;
-      const groupName = this.userGroups.find(g => g.id === announcement.groupId)?.name || 'General';
       const isScheduled = announcement.scheduledFor && announcement.scheduledFor > new Date();
       const userLiked = announcement.likes && announcement.likes.includes(this.currentUser?.uid);
+      
+      // Build audience display
+      let audienceDisplay = [];
+      
+      // Handle new format (targetGroups/targetUsers)
+      if (announcement.targetGroups && announcement.targetGroups.length > 0) {
+        const groupNames = announcement.targetGroups.map(groupId => {
+          const group = this.userGroups.find(g => g.id === groupId);
+          return group ? group.name : 'Unknown Group';
+        });
+        audienceDisplay.push(`Groups: ${groupNames.join(', ')}`);
+      }
+      
+      if (announcement.targetUsers && announcement.targetUsers.length > 0) {
+        const userNames = announcement.targetUsers.map(userId => {
+          const user = this.allUsers.find(u => u.id === userId);
+          return user ? (user.name || user.email) : 'Unknown User';
+        });
+        audienceDisplay.push(`Users: ${userNames.join(', ')}`);
+      }
+      
+      // Handle legacy format (groupId)
+      if (!audienceDisplay.length && announcement.groupId) {
+        const groupName = this.userGroups.find(g => g.id === announcement.groupId)?.name || 'General';
+        audienceDisplay.push(`Group: ${groupName}`);
+      }
+      
+      const audienceText = audienceDisplay.length > 0 ? audienceDisplay.join(' • ') : 'No audience specified';
       
       return `
         <div class="announcement-item ${isScheduled ? 'scheduled' : ''}" data-id="${announcement.id}">
@@ -205,7 +604,7 @@ class AnnouncementsManager {
               <h3 class="announcement-title">${announcement.title || 'Untitled'}</h3>
               <div class="announcement-meta">
                 <span class="announcement-author">By: ${announcement.authorName || 'Anonymous'}</span>
-                <span class="announcement-group">Group: ${groupName}</span>
+                <span class="announcement-audience">Audience: ${audienceText}</span>
                 <span class="announcement-date">${this.formatDate(announcement.createdAt)}</span>
                 ${isScheduled ? `<span class="scheduled-badge">Scheduled for ${this.formatDate(announcement.scheduledFor)}</span>` : ''}
               </div>
@@ -238,19 +637,52 @@ class AnnouncementsManager {
   }
 
   showCreatePopup() {
+    // Ensure user is authenticated before showing popup
+    if (!this.currentUser || !this.currentUser.uid) {
+      console.log('User not authenticated, cannot show create popup');
+      return;
+    }
+    
+    // Initialize audience selector if not already done
+    if (!this.titleInput) {
+      this.addGroupSelectionToPopup();
+    }
+    
     this.editingAnnouncement = null;
     this.resetForm();
     this.popupContent.querySelector('h2').textContent = 'Create Announcement';
     this.submitBtn.textContent = 'Post';
     this.popup.style.display = 'flex';
-    this.titleInput.focus();
+    
+    // Focus on title input if it exists
+    if (this.titleInput) {
+      this.titleInput.focus();
+    }
   }
 
   showEditPopup(announcement) {
     this.editingAnnouncement = announcement;
     this.titleInput.value = announcement.title || '';
     this.messageInput.value = announcement.message || '';
-    this.groupSelect.value = announcement.groupId || '';
+    
+    // Reset and populate audience selector
+    this.selectedGroups.clear();
+    this.selectedUsers.clear();
+    
+    // Handle both old format (groupId) and new format (targetGroups/targetUsers)
+    if (announcement.targetGroups && announcement.targetGroups.length > 0) {
+      announcement.targetGroups.forEach(groupId => this.selectedGroups.add(groupId));
+    } else if (announcement.groupId) {
+      // Legacy support for old announcements
+      this.selectedGroups.add(announcement.groupId);
+    }
+    
+    if (announcement.targetUsers && announcement.targetUsers.length > 0) {
+      announcement.targetUsers.forEach(userId => this.selectedUsers.add(userId));
+    }
+    
+    this.updateSelectedGroups();
+    this.updateSelectedUsers();
     
     if (announcement.scheduledFor) {
       const date = new Date(announcement.scheduledFor);
@@ -270,17 +702,28 @@ class AnnouncementsManager {
   }
 
   resetForm() {
-    this.titleInput.value = '';
-    this.messageInput.value = '';
-    this.groupSelect.value = '';
-    this.scheduledDateInput.value = '';
-    this.errorDiv.textContent = '';
+    // Only reset form elements if they exist
+    if (this.titleInput) this.titleInput.value = '';
+    if (this.messageInput) this.messageInput.value = '';
+    if (this.scheduledDateInput) this.scheduledDateInput.value = '';
+    if (this.errorDiv) this.errorDiv.textContent = '';
+    
+    // Reset audience selector if it's been initialized
+    if (this.selectedGroups) {
+      this.selectedGroups.clear();
+      this.selectedUsers.clear();
+      this.updateSelectedGroups();
+      this.updateSelectedUsers();
+      this.clearSearches();
+      
+      // Reset to groups tab (using correct tab name)
+      this.switchAudienceTab('groups');
+    }
   }
 
   async handleSubmit() {
     const title = this.titleInput.value.trim();
     const message = this.messageInput.value.trim();
-    const groupId = this.groupSelect.value;
     const scheduledDate = this.scheduledDateInput.value;
 
     // Validation
@@ -294,11 +737,18 @@ class AnnouncementsManager {
       return;
     }
 
+    // Check if at least one audience is selected
+    if (this.selectedGroups.size === 0 && this.selectedUsers.size === 0) {
+      this.showError('Please select at least one group or user as audience');
+      return;
+    }
+
     try {
       const announcementData = {
         title,
         message,
-        groupId: groupId || '',
+        targetGroups: Array.from(this.selectedGroups),
+        targetUsers: Array.from(this.selectedUsers),
         authorName: this.currentUser.displayName || this.currentUser.email,
         createdBy: this.currentUser.uid,
         updatedAt: serverTimestamp()

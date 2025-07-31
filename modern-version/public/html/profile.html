@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Profile - NEPP</title>
+  <link rel="icon" href="../images/logo.png" type="image/png">
   <link rel="stylesheet" href="../css/styles.css">
   <link rel="stylesheet" href="../css/profile.css">
 </head>
@@ -63,6 +64,70 @@
                   <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
                 Save Changes
+              </button>
+            </div>
+          </div>
+
+          <div class="profile-section">
+            <h3>Privacy Settings</h3>
+            <div class="privacy-form">
+              <div class="privacy-option">
+                <div class="privacy-option-info">
+                  <h4>Profile Visibility</h4>
+                  <p>Control who can view your profile information</p>
+                </div>
+                <select id="profileVisibility" class="privacy-select">
+                  <option value="public">Everyone</option>
+                  <option value="members">Members only</option>
+                  <option value="private">Private</option>
+                </select>
+              </div>
+              <div class="privacy-option">
+                <div class="privacy-option-info">
+                  <h4>Email Visibility</h4>
+                  <p>Show your email address to other users</p>
+                </div>
+                <select id="emailVisibility" class="privacy-select">
+                  <option value="public">Everyone</option>
+                  <option value="members">Members only</option>
+                  <option value="private">Private</option>
+                </select>
+              </div>
+              <div class="privacy-option">
+                <div class="privacy-option-info">
+                  <h4>Activity Status</h4>
+                  <p>Show when you're online and active</p>
+                </div>
+                <label class="privacy-toggle">
+                  <input type="checkbox" id="showActivityStatus" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="privacy-option">
+                <div class="privacy-option-info">
+                  <h4>Group Notifications</h4>
+                  <p>Receive notifications when you're added to groups</p>
+                </div>
+                <label class="privacy-toggle">
+                  <input type="checkbox" id="groupNotifications" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="privacy-option">
+                <div class="privacy-option-info">
+                  <h4>Form Notifications</h4>
+                  <p>Receive notifications for new forms and deadlines</p>
+                </div>
+                <label class="privacy-toggle">
+                  <input type="checkbox" id="formNotifications" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <button class="save-privacy-btn" id="savePrivacyBtn">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Save Privacy Settings
               </button>
             </div>
           </div>

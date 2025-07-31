@@ -3,8 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <title>Login - NEPP</title>
-  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="icon" href="./images/logo.png" type="image/png">
   <style>
+    /* --- Global and Body Styles --- */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    margin: 0;
+    font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+    background: #101622;
+    color: #fff;
+  }
+
     .auth-container {
       max-width: 400px;
       margin: 100px auto;
@@ -44,15 +53,23 @@
       font-weight: bold;
       cursor: pointer;
       margin-top: 1rem;
+      transition: background-color 0.3s ease;
+    }
+    .auth-btn:hover:not(:disabled) {
+      background: #ffed4a;
+    }
+    .auth-btn:disabled {
+      background: #666;
+      cursor: not-allowed;
     }
     .auth-links {
       margin-top: 1rem;
       text-align: center;
-      color: #fff;
+      color: #FFD600;
     }
     .auth-links a {
       color: #FFD600;
-      text-decoration: none;
+      text-decoration: underline;
     }
     .auth-message {
       margin-top: 1rem;
@@ -95,7 +112,7 @@
     }
   </style>
 </head>
-<body>
+<body class = "background">
   <div class="auth-container">
     <h1>Login to NEPP</h1>
     <form id="login-form">

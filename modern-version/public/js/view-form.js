@@ -313,12 +313,8 @@ document.getElementById('formResponse').addEventListener('submit', async (e) => 
     await addDoc(collection(db, 'form_responses'), response);
     alert('Response submitted successfully!');
     
-    // Redirect to results page if creator, forms page otherwise
-    if (form.createdBy === auth.currentUser.uid) {
-      window.location.href = `form-results.html?id=${formId}`;
-    } else {
-      window.location.href = 'forms.html';
-    }
+    // All users should be redirected to forms page after submission
+    window.location.href = 'forms.html';
   } catch (error) {
     console.error('Error submitting response:', error);
     alert('Error submitting response. Please try again.');

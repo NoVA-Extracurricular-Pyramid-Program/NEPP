@@ -316,3 +316,125 @@
     text-align: center;
   }
 }
+
+/* Privacy Settings */
+.privacy-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.privacy-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  border: 1px solid #374a6b;
+}
+
+.privacy-option-info h4 {
+  color: #fff;
+  margin: 0 0 0.25rem 0;
+  font-size: 1rem;
+}
+
+.privacy-option-info p {
+  color: #8892b0;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.privacy-select {
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid #374a6b;
+  border-radius: 6px;
+  color: white;
+  font-size: 0.9rem;
+  min-width: 120px;
+}
+
+.privacy-select:focus {
+  outline: none;
+  border-color: #ffd600;
+}
+
+.privacy-toggle {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 26px;
+}
+
+.privacy-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #374a6b;
+  transition: 0.4s;
+  border-radius: 26px;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.4s;
+  border-radius: 50%;
+}
+
+.privacy-toggle input:checked + .toggle-slider {
+  background-color: #ffd600;
+}
+
+.privacy-toggle input:checked + .toggle-slider:before {
+  transform: translateX(24px);
+}
+
+.save-privacy-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: #ffd600;
+  border: none;
+  border-radius: 8px;
+  color: #0a0f1a;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 1rem;
+  align-self: flex-start;
+}
+
+.save-privacy-btn:hover {
+  background: #ffe666;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 768px) {
+  .privacy-option {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  
+  .privacy-option-info {
+    text-align: left;
+  }
+}

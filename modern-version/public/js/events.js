@@ -16,6 +16,11 @@ class EventsManager {
         this.currentView = 'list';
         this.calendar = null;
         
+        // Initialize services (they are singletons)
+        this.eventsService = EventsService;
+        this.groupsService = GroupsService;
+        this.authManager = authManager;
+        
         this.initializeElements();
         this.bindEvents();
         this.setupAuthListener();
@@ -46,9 +51,39 @@ class EventsManager {
         this.createEventForm = document.getElementById('createEventForm');
         this.cancelCreateEventBtn = document.getElementById('cancelCreateEvent');
         
+        // Target audience selector elements
+        this.audienceSelector = document.querySelector('.audience-selector');
+        this.audienceTabs = document.querySelectorAll('.audience-tab');
+        this.audienceSections = document.querySelectorAll('.audience-section');
+        
+        // Group elements
+        this.selectedGroupsContainer = document.querySelector('#selectedGroups');
+        this.groupSearch = document.querySelector('#groupSearch');
+        this.groupResults = document.querySelector('#groupResults');
+        
+        // User elements  
+        this.selectedUsersContainer = document.querySelector('#selectedUsers');
+        this.userSearch = document.querySelector('#userSearch');
+        this.userResults = document.querySelector('#userResults');
+        
+        // Both mode elements
+        this.bothGroupsContainer = document.querySelector('#selectedGroupsBoth');
+        this.bothUsersContainer = document.querySelector('#selectedUsersBoth');
+        this.bothGroupSearch = document.querySelector('#groupSearchBoth');
+        this.bothUserSearch = document.querySelector('#userSearchBoth');
+        this.bothGroupResults = document.querySelector('#groupResultsBoth');
+        this.bothUserResults = document.querySelector('#userResultsBoth');
+        
         this.eventDetailsModal = document.getElementById('eventDetailsModal');
         this.eventDetailsContainer = document.getElementById('eventDetailsContainer');
         this.closeEventDetailsBtn = document.getElementById('closeEventDetails');
+        
+        // Initialize target audience management
+        this.selectedGroups = new Set();
+        this.selectedUsers = new Set();
+        this.allUsers = [];
+        this.allGroups = [];
+        this.currentTab = 'groups'; // Track current tab
     }
 
     bindEvents() {
@@ -87,6 +122,9 @@ class EventsManager {
             this.hideCreateEventModal();
         });
 
+        // Target audience events
+        this.bindAudienceEvents();
+
         // Event details modal
         this.closeEventDetailsBtn.addEventListener('click', () => {
             this.hideEventDetailsModal();
@@ -115,10 +153,31 @@ class EventsManager {
                 // Load all data and initialize calendar
                 await this.loadAllData();
                 this.initializeCalendar();
+                
+                // Load groups and users for audience selector
+                await this.loadGroupsAndUsers();
+                
+                // Check for event parameter in URL (for notifications)
+                this.checkForEventParameter();
             } else {
                 this.showAuthAlert();
             }
         });
+    }
+
+    checkForEventParameter() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const eventId = urlParams.get('event');
+        
+        if (eventId) {
+            // Show the event details modal after a short delay to ensure everything is loaded
+            setTimeout(() => {
+                this.showEventDetails(eventId);
+                // Clean up the URL parameter
+                const newUrl = window.location.pathname;
+                window.history.replaceState({}, document.title, newUrl);
+            }, 500);
+        }
     }
 
     showAuthAlert() {
@@ -152,13 +211,12 @@ class EventsManager {
 
     async loadFormDueDates() {
         try {
-            // Get forms with due dates that the user has access to
-            // First, get forms created by the user
+            this.formDueDates = [];
+            
+            // Get forms created by the user
             const userFormsQuery = query(
                 collection(db, 'forms'),
-                where('createdBy', '==', this.currentUser.uid),
-                where('dueDate', '!=', null),
-                orderBy('dueDate', 'asc')
+                where('createdBy', '==', this.currentUser.uid)
             );
             
             const userFormsSnapshot = await getDocs(userFormsQuery);
@@ -167,38 +225,50 @@ class EventsManager {
             // Then, get forms from groups the user is a member of
             if (this.userGroups && this.userGroups.length > 0) {
                 for (const group of this.userGroups) {
-                    const groupFormsQuery = query(
-                        collection(db, 'forms'),
-                        where('groupId', '==', group.id),
-                        where('dueDate', '!=', null),
-                        orderBy('dueDate', 'asc')
-                    );
-                    
-                    const groupFormsSnapshot = await getDocs(groupFormsQuery);
-                    // Avoid duplicates
-                    const newForms = groupFormsSnapshot.docs.filter(doc => 
-                        !allForms.some(existingDoc => existingDoc.id === doc.id)
-                    );
-                    allForms = [...allForms, ...newForms];
+                    try {
+                        const groupFormsQuery = query(
+                            collection(db, 'forms'),
+                            where('groupId', '==', group.id)
+                        );
+                        
+                        const groupFormsSnapshot = await getDocs(groupFormsQuery);
+                        // Avoid duplicates
+                        const newForms = groupFormsSnapshot.docs.filter(doc => 
+                            !allForms.some(existingDoc => existingDoc.id === doc.id)
+                        );
+                        allForms = [...allForms, ...newForms];
+                    } catch (error) {
+                        console.log(`Could not load forms for group ${group.id}: ${error.message}`);
+                        // Continue with other groups even if one fails
+                    }
                 }
             }
             
-            this.formDueDates = allForms.map(doc => {
-                const data = doc.data();
-                return {
-                    id: `form-${doc.id}`,
-                    type: 'form-due',
-                    title: `Form Due: ${data.title}`,
-                    description: `Form "${data.title}" is due`,
-                    date: data.dueDate.toDate(),
-                    time: data.dueTime || '23:59',
-                    location: 'Online Form',
-                    formId: doc.id,
-                    visibility: data.type || 'public',
-                    createdBy: data.createdBy,
-                    category: 'deadline'
-                };
-            });
+            // Filter for forms with due dates and create calendar events
+            this.formDueDates = allForms
+                .filter(doc => {
+                    const data = doc.data();
+                    return data.dueDate != null;
+                })
+                .map(doc => {
+                    const data = doc.data();
+                    return {
+                        id: `form-${doc.id}`,
+                        type: 'form-due',
+                        title: `Form Due: ${data.title}`,
+                        description: `Form "${data.title}" is due`,
+                        date: data.dueDate.toDate(),
+                        time: data.dueTime || '23:59',
+                        location: 'Online Form',
+                        formId: doc.id,
+                        visibility: data.type || 'public',
+                        createdBy: data.createdBy,
+                        category: 'deadline'
+                    };
+                })
+                .sort((a, b) => a.date - b.date); // Sort by due date
+                
+            console.log(`Loaded ${this.formDueDates.length} form due dates`);
         } catch (error) {
             console.error('Error loading form due dates:', error);
             this.formDueDates = [];
@@ -392,7 +462,7 @@ class EventsManager {
         try {
             // Load events created by user or for their groups
             const userGroupIds = this.userGroups.map(group => group.id);
-            this.events = await EventsService.getUserEvents(this.currentUser.uid, userGroupIds);
+            this.events = await this.eventsService.getUserEvents(this.currentUser.uid, userGroupIds);
         } catch (error) {
             console.error('Error loading events:', error);
             this.events = [];
@@ -615,33 +685,735 @@ class EventsManager {
         }
     }
 
+    // Target Audience methods (similar to announcements)
+    bindAudienceEvents() {
+        if (!this.audienceTabs) return;
+        
+        // Tab switching
+        this.audienceTabs.forEach(tab => {
+            tab.addEventListener('click', () => this.switchAudienceTab(tab.dataset.target));
+        });
+        
+        // Group search events
+        if (this.groupSearch) {
+            this.groupSearch.addEventListener('input', (e) => this.searchGroups(e.target.value));
+            this.groupSearch.addEventListener('focus', () => {
+                // Show all user's groups when focusing on search
+                this.searchGroups(''); // Empty search shows all groups
+            });
+        }
+        
+        if (this.bothGroupSearch) {
+            this.bothGroupSearch.addEventListener('input', (e) => this.searchGroups(e.target.value, 'both'));
+            this.bothGroupSearch.addEventListener('focus', () => {
+                // Show all user's groups when focusing on search
+                this.searchGroups('', 'both'); // Empty search shows all groups
+            });
+        }
+        
+        // User search events
+        if (this.userSearch) {
+            this.userSearch.addEventListener('input', (e) => this.searchUsers(e.target.value));
+            this.userSearch.addEventListener('focus', () => this.showUserResults());
+        }
+        
+        if (this.bothUserSearch) {
+            this.bothUserSearch.addEventListener('input', (e) => this.searchUsers(e.target.value, 'both'));
+            this.bothUserSearch.addEventListener('focus', () => this.showUserResults('both'));
+        }
+        
+        // Hide results when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.group-search') && !e.target.closest('.group-results')) {
+                this.hideGroupResults();
+            }
+            if (!e.target.closest('.user-search') && !e.target.closest('.user-results')) {
+                this.hideUserResults();
+            }
+        });
+    }
+
+    async loadGroupsAndUsers() {
+        try {
+            // Check if user is authenticated
+            if (!this.currentUser || !this.currentUser.uid) {
+                console.log('User not authenticated yet, skipping group and user loading');
+                return;
+            }
+
+            // Load only groups the user is a member of (security fix)
+            this.allGroups = [...this.userGroups]; // Use userGroups which are already filtered
+            
+            // Load all users (but filter out current user)
+            const usersSnapshot = await getDocs(collection(db, 'users'));
+            this.allUsers = [];
+            usersSnapshot.forEach(doc => {
+                const userData = doc.data();
+                // Don't include current user in selection
+                if (doc.id !== this.currentUser.uid) {
+                    // Debug: Log user data to see what fields are available
+                    console.log('User data for', doc.id, ':', userData);
+                    this.allUsers.push({ id: doc.id, ...userData });
+                }
+            });
+            
+            console.log('Loaded users:', this.allUsers);
+            
+            // Display user's groups by default
+            this.displayUserGroups();
+        } catch (error) {
+            console.error('Error loading groups and users:', error);
+        }
+    }
+
+    displayUserGroups() {
+        // Display all user's groups in the groups tab
+        if (this.groupResults) {
+            this.renderGroupResults(this.allGroups, 'single');
+        }
+        
+        // Display all user's groups in the both tab
+        if (this.bothGroupResults) {
+            this.renderGroupResults(this.allGroups, 'both');
+        }
+    }
+
+    switchAudienceTab(tabName) {
+        this.currentTab = tabName;
+        
+        // Update tab buttons
+        this.audienceTabs.forEach(tab => {
+            if (tab.dataset.target === tabName) {
+                tab.classList.add('active');
+            } else {
+                tab.classList.remove('active');
+            }
+        });
+        
+        // Update sections
+        this.audienceSections.forEach(section => {
+            if (section.id === `${tabName}-selection`) {
+                section.classList.add('active');
+            } else {
+                section.classList.remove('active');
+            }
+        });
+        
+        // Adjust modal size based on selected tab
+        const modalContent = this.createEventModal.querySelector('.modal-content');
+        if (modalContent) {
+            if (tabName === 'both') {
+                // Increase modal size for "Both" tab to accommodate all containers
+                modalContent.style.maxWidth = '900px';
+                modalContent.style.maxHeight = '90vh';
+                modalContent.style.overflowY = 'auto';
+            } else {
+                // Reset to default size for single tabs
+                modalContent.style.maxWidth = '600px';
+                modalContent.style.maxHeight = '80vh';
+                modalContent.style.overflowY = 'auto';
+            }
+        }
+    }
+
+    searchGroups(searchTerm, mode = 'single') {
+        const resultsContainer = mode === 'both' ? this.bothGroupResults : this.groupResults;
+        
+        if (!searchTerm.trim()) {
+            // Show all user's groups when no search term
+            this.renderGroupResults(this.allGroups, mode);
+            return;
+        }
+
+        // Filter only within user's groups (security - can't search for groups they're not in)
+        const filteredGroups = this.allGroups.filter(group => {
+            const searchStr = searchTerm.toLowerCase();
+            return (
+                (group.name && group.name.toLowerCase().includes(searchStr)) ||
+                (group.description && group.description.toLowerCase().includes(searchStr))
+            );
+        });
+
+        this.renderGroupResults(filteredGroups, mode);
+    }
+
+    renderGroupResults(groups, mode = 'single') {
+        const resultsContainer = mode === 'both' ? this.bothGroupResults : this.groupResults;
+        if (!resultsContainer) return;
+        
+        resultsContainer.innerHTML = '';
+        
+        if (groups.length === 0) {
+            resultsContainer.innerHTML = `
+                <div class="no-groups-message" style="padding: 1rem; text-align: center; color: #8892b0;">
+                    ${this.allGroups.length === 0 ? 
+                        'You are not a member of any groups yet.' : 
+                        'No groups match your search.'}
+                </div>
+            `;
+        } else {
+            // Add a compact security notice at the top
+            const securityNotice = document.createElement('div');
+            securityNotice.className = 'security-notice';
+            securityNotice.style.cssText = `
+                padding: 0.4rem 0.6rem;
+                background: rgba(255, 214, 0, 0.1);
+                border: 1px solid #ffd600;
+                border-radius: 4px;
+                margin-bottom: 0.6rem;
+                font-size: 0.75rem;
+                color: #ffd600;
+                text-align: center;
+            `;
+            securityNotice.innerHTML = `
+                <strong>Security:</strong> Showing your ${groups.length} available groups
+            `;
+            resultsContainer.appendChild(securityNotice);
+            
+            groups.forEach(group => {
+                if (!this.selectedGroups.has(group.id)) {
+                    const groupItem = document.createElement('div');
+                    groupItem.className = 'group-item';
+                    groupItem.style.cssText = `
+                        padding: 0.75rem;
+                        border: 1px solid #374a6b;
+                        border-radius: 8px;
+                        margin-bottom: 0.5rem;
+                        cursor: pointer;
+                        transition: all 0.2s ease;
+                    `;
+                    groupItem.innerHTML = `
+                        <div class="group-name" style="font-weight: 500; margin-bottom: 0.25rem;">${group.name}</div>
+                        <div class="group-description" style="font-size: 0.85rem; color: #8892b0;">${group.description || 'No description'}</div>
+                        <div class="group-member-count" style="font-size: 0.8rem; color: #ffd600; margin-top: 0.25rem;">
+                            ${group.members ? group.members.length : 0} members
+                        </div>
+                    `;
+                    
+                    groupItem.addEventListener('mouseenter', () => {
+                        groupItem.style.borderColor = '#ffd600';
+                        groupItem.style.background = 'rgba(255, 214, 0, 0.05)';
+                    });
+                    
+                    groupItem.addEventListener('mouseleave', () => {
+                        groupItem.style.borderColor = '#374a6b';
+                        groupItem.style.background = 'transparent';
+                    });
+                    
+                    groupItem.addEventListener('click', () => {
+                        this.selectGroup(group, mode);
+                    });
+                    
+                    resultsContainer.appendChild(groupItem);
+                }
+            });
+        }
+        
+        this.showGroupResults(mode);
+    }
+
+    selectGroup(group, mode = 'single') {
+        if (this.selectedGroups.has(group.id)) return;
+        
+        this.selectedGroups.add(group.id);
+        
+        const container = mode === 'both' ? this.bothGroupsContainer : this.selectedGroupsContainer;
+        const groupTag = document.createElement('div');
+        groupTag.className = 'selected-group';
+        groupTag.style.cssText = `
+            display: inline-block;
+            margin: 0.25rem;
+            padding: 0.5rem 0.75rem;
+            background: rgba(255, 214, 0, 0.1);
+            border: 1px solid #ffd600;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            vertical-align: top;
+        `;
+        groupTag.innerHTML = `
+            <span style="color: #ffffff; margin-right: 0.5rem;">${group.name}</span>
+            <button type="button" class="remove-btn" data-group-id="${group.id}" style="
+                background: none;
+                border: none;
+                color: #ffd600;
+                font-size: 1rem;
+                cursor: pointer;
+                padding: 0;
+                margin-left: 0.25rem;
+            ">×</button>
+        `;
+        
+        groupTag.querySelector('.remove-btn').addEventListener('click', () => {
+            this.removeGroup(group.id, mode);
+        });
+        
+        container.appendChild(groupTag);
+        
+        // Update the container styling to display items in a grid
+        container.style.cssText = `
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+            min-height: 2rem;
+            padding: 0.5rem;
+            border: 1px solid #374a6b;
+            border-radius: 8px;
+            background: rgba(55, 74, 107, 0.1);
+        `;
+        
+        this.clearGroupSearch(mode);
+        
+        // Sync selections across tabs
+        this.syncGroupSelections();
+    }
+
+    removeGroup(groupId, mode = 'single') {
+        this.selectedGroups.delete(groupId);
+        
+        // Remove from all containers
+        const allContainers = [this.selectedGroupsContainer, this.bothGroupsContainer];
+        allContainers.forEach(container => {
+            if (container) {
+                const groupTag = container.querySelector(`[data-group-id="${groupId}"]`)?.parentElement;
+                if (groupTag) {
+                    groupTag.remove();
+                }
+            }
+        });
+        
+        // Refresh search results to show the group as available again
+        this.refreshGroupResults();
+    }
+
+    searchUsers(searchTerm, mode = 'single') {
+        const resultsContainer = mode === 'both' ? this.bothUserResults : this.userResults;
+        
+        if (!searchTerm.trim()) {
+            this.hideUserResults(mode);
+            return;
+        }
+
+        const filteredUsers = this.allUsers.filter(user => {
+            const searchStr = searchTerm.toLowerCase();
+            return (
+                (user.firstName && user.firstName.toLowerCase().includes(searchStr)) ||
+                (user.lastName && user.lastName.toLowerCase().includes(searchStr)) ||
+                (user.email && user.email.toLowerCase().includes(searchStr))
+            );
+        });
+
+        this.renderUserResults(filteredUsers, mode);
+    }
+
+    renderUserResults(users, mode = 'single') {
+        const resultsContainer = mode === 'both' ? this.bothUserResults : this.userResults;
+        if (!resultsContainer) return;
+        
+        resultsContainer.innerHTML = '';
+        
+        if (users.length === 0) {
+            resultsContainer.innerHTML = `
+                <div class="no-users-message" style="padding: 1rem; text-align: center; color: #8892b0;">
+                    No users match your search.
+                </div>
+            `;
+        } else {
+            users.forEach(user => {
+                if (!this.selectedUsers.has(user.id)) {
+                    const userItem = document.createElement('div');
+                    userItem.className = 'user-item';
+                    userItem.style.cssText = `
+                        padding: 0.75rem;
+                        border: 1px solid #374a6b;
+                        border-radius: 8px;
+                        margin-bottom: 0.5rem;
+                        cursor: pointer;
+                        transition: all 0.2s ease;
+                    `;
+                    
+                    // Use displayName from Firestore user document
+                    const displayName = user.displayName || user.email.split('@')[0];
+                    
+                    console.log('User name debug:', { 
+                        user: user.email, 
+                        displayName: user.displayName,
+                        finalDisplayName: displayName,
+                        rawUserData: user 
+                    });
+                    
+                    userItem.innerHTML = `
+                        <div class="user-name" style="font-weight: 500; margin-bottom: 0.25rem; color: #ffffff;">${displayName}</div>
+                        <div class="user-email" style="font-size: 0.85rem; color: #8892b0;">${user.email}</div>
+                    `;
+                    
+                    userItem.addEventListener('mouseenter', () => {
+                        userItem.style.borderColor = '#ffd600';
+                        userItem.style.background = 'rgba(255, 214, 0, 0.05)';
+                    });
+                    
+                    userItem.addEventListener('mouseleave', () => {
+                        userItem.style.borderColor = '#374a6b';
+                        userItem.style.background = 'transparent';
+                    });
+                    
+                    userItem.addEventListener('click', () => {
+                        this.selectUser(user, mode);
+                    });
+                    
+                    resultsContainer.appendChild(userItem);
+                }
+            });
+        }
+        
+        this.showUserResults(mode);
+    }
+
+    selectUser(user, mode = 'single') {
+        if (this.selectedUsers.has(user.id)) return;
+        
+        this.selectedUsers.add(user.id);
+        
+        const container = mode === 'both' ? this.bothUsersContainer : this.selectedUsersContainer;
+        const userTag = document.createElement('div');
+        userTag.className = 'selected-user';
+        userTag.style.cssText = `
+            display: inline-block;
+            margin: 0.25rem;
+            padding: 0.5rem 0.75rem;
+            background: rgba(255, 214, 0, 0.1);
+            border: 1px solid #ffd600;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            vertical-align: top;
+        `;
+        
+        // Use displayName from Firestore user document
+        const displayName = user.displayName || user.email.split('@')[0];
+        
+        userTag.innerHTML = `
+            <span style="color: #ffffff; margin-right: 0.5rem;">${displayName}</span>
+            <button type="button" class="remove-btn" data-user-id="${user.id}" style="
+                background: none;
+                border: none;
+                color: #ffd600;
+                font-size: 1rem;
+                cursor: pointer;
+                padding: 0;
+                margin-left: 0.25rem;
+            ">×</button>
+        `;
+        
+        userTag.querySelector('.remove-btn').addEventListener('click', () => {
+            this.removeUser(user.id, mode);
+        });
+        
+        container.appendChild(userTag);
+        
+        // Update the container styling to display items in a grid
+        container.style.cssText = `
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+            min-height: 2rem;
+            padding: 0.5rem;
+            border: 1px solid #374a6b;
+            border-radius: 8px;
+            background: rgba(55, 74, 107, 0.1);
+        `;
+        
+        this.clearUserSearch(mode);
+        
+        // Sync selections across tabs
+        this.syncUserSelections();
+    }
+
+    removeUser(userId, mode = 'single') {
+        this.selectedUsers.delete(userId);
+        
+        // Remove from all containers  
+        const allContainers = [this.selectedUsersContainer, this.bothUsersContainer];
+        allContainers.forEach(container => {
+            if (container) {
+                const userTag = container.querySelector(`[data-user-id="${userId}"]`)?.parentElement;
+                if (userTag) {
+                    userTag.remove();
+                }
+            }
+        });
+        
+        // Refresh search results to show the user as available again
+        this.refreshUserResults();
+    }
+
+    showGroupResults(mode = 'single') {
+        const resultsContainer = mode === 'both' ? this.bothGroupResults : this.groupResults;
+        if (resultsContainer && resultsContainer.children.length > 0) {
+            resultsContainer.style.display = 'block';
+        }
+    }
+
+    hideGroupResults(mode = 'single') {
+        const resultsContainer = mode === 'both' ? this.bothGroupResults : this.groupResults;
+        if (resultsContainer) {
+            resultsContainer.style.display = 'none';
+        }
+    }
+
+    showUserResults(mode = 'single') {
+        const resultsContainer = mode === 'both' ? this.bothUserResults : this.userResults;
+        if (resultsContainer && resultsContainer.children.length > 0) {
+            resultsContainer.style.display = 'block';
+        }
+    }
+
+    hideUserResults(mode = 'single') {
+        const resultsContainer = mode === 'both' ? this.bothUserResults : this.userResults;
+        if (resultsContainer) {
+            resultsContainer.style.display = 'none';
+        }
+    }
+
+    clearGroupSearch(mode = 'single') {
+        const searchInput = mode === 'both' ? this.bothGroupSearch : this.groupSearch;
+        if (searchInput) {
+            searchInput.value = '';
+        }
+        this.hideGroupResults(mode);
+    }
+
+    clearUserSearch(mode = 'single') {
+        const searchInput = mode === 'both' ? this.bothUserSearch : this.userSearch;
+        if (searchInput) {
+            searchInput.value = '';
+        }
+        this.hideUserResults(mode);
+    }
+
+    // Sync group selections across tabs
+    syncGroupSelections() {
+        const allContainers = [this.selectedGroupsContainer, this.bothGroupsContainer];
+        
+        allContainers.forEach(container => {
+            if (container) {
+                // Clear and rebuild the container
+                container.innerHTML = '';
+                
+                // Apply container styling
+                container.style.cssText = `
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 0.25rem;
+                    min-height: 2rem;
+                    padding: 0.5rem;
+                    border: 1px solid #374a6b;
+                    border-radius: 8px;
+                    background: rgba(55, 74, 107, 0.1);
+                `;
+                
+                // Add all selected groups
+                this.selectedGroups.forEach(groupId => {
+                    const group = this.allGroups.find(g => g.id === groupId);
+                    if (group) {
+                        const groupTag = document.createElement('div');
+                        groupTag.className = 'selected-group';
+                        groupTag.style.cssText = `
+                            display: inline-block;
+                            margin: 0.25rem;
+                            padding: 0.5rem 0.75rem;
+                            background: rgba(255, 214, 0, 0.1);
+                            border: 1px solid #ffd600;
+                            border-radius: 20px;
+                            font-size: 0.85rem;
+                            vertical-align: top;
+                        `;
+                        groupTag.innerHTML = `
+                            <span style="color: #ffffff; margin-right: 0.5rem;">${group.name}</span>
+                            <button type="button" class="remove-btn" data-group-id="${group.id}" style="
+                                background: none;
+                                border: none;
+                                color: #ffd600;
+                                font-size: 1rem;
+                                cursor: pointer;
+                                padding: 0;
+                                margin-left: 0.25rem;
+                            ">×</button>
+                        `;
+                        
+                        groupTag.querySelector('.remove-btn').addEventListener('click', () => {
+                            this.removeGroup(group.id);
+                        });
+                        
+                        container.appendChild(groupTag);
+                    }
+                });
+            }
+        });
+    }
+
+    // Sync user selections across tabs
+    syncUserSelections() {
+        const allContainers = [this.selectedUsersContainer, this.bothUsersContainer];
+        
+        allContainers.forEach(container => {
+            if (container) {
+                // Clear and rebuild the container
+                container.innerHTML = '';
+                
+                // Apply container styling
+                container.style.cssText = `
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 0.25rem;
+                    min-height: 2rem;
+                    padding: 0.5rem;
+                    border: 1px solid #374a6b;
+                    border-radius: 8px;
+                    background: rgba(55, 74, 107, 0.1);
+                `;
+                
+                // Add all selected users
+                this.selectedUsers.forEach(userId => {
+                    const user = this.allUsers.find(u => u.id === userId);
+                    if (user) {
+                        const userTag = document.createElement('div');
+                        userTag.className = 'selected-user';
+                        userTag.style.cssText = `
+                            display: inline-block;
+                            margin: 0.25rem;
+                            padding: 0.5rem 0.75rem;
+                            background: rgba(255, 214, 0, 0.1);
+                            border: 1px solid #ffd600;
+                            border-radius: 20px;
+                            font-size: 0.85rem;
+                            vertical-align: top;
+                        `;
+                        
+                        // Use displayName from Firestore user document
+                        const displayName = user.displayName || user.email.split('@')[0];
+                        
+                        userTag.innerHTML = `
+                            <span style="color: #ffffff; margin-right: 0.5rem;">${displayName}</span>
+                            <button type="button" class="remove-btn" data-user-id="${user.id}" style="
+                                background: none;
+                                border: none;
+                                color: #ffd600;
+                                font-size: 1rem;
+                                cursor: pointer;
+                                padding: 0;
+                                margin-left: 0.25rem;
+                            ">×</button>
+                        `;
+                        
+                        userTag.querySelector('.remove-btn').addEventListener('click', () => {
+                            this.removeUser(user.id);
+                        });
+                        
+                        container.appendChild(userTag);
+                    }
+                });
+            }
+        });
+    }
+
+    // Refresh group search results to show newly available groups
+    refreshGroupResults() {
+        // Refresh both group result containers
+        if (this.currentTab === 'groups' && this.groupResults && this.groupResults.style.display === 'block') {
+            this.renderGroupResults(this.allGroups, 'single');
+        }
+        if (this.currentTab === 'both' && this.bothGroupResults && this.bothGroupResults.style.display === 'block') {
+            this.renderGroupResults(this.allGroups, 'both');
+        }
+    }
+
+    // Refresh user search results to show newly available users
+    refreshUserResults() {
+        // Only refresh if search results are currently visible and have content
+        if (this.currentTab === 'users' && this.userResults && this.userResults.style.display === 'block') {
+            const searchTerm = this.userSearch ? this.userSearch.value : '';
+            if (searchTerm.trim()) {
+                this.searchUsers(searchTerm, 'single');
+            }
+        }
+        if (this.currentTab === 'both' && this.bothUserResults && this.bothUserResults.style.display === 'block') {
+            const searchTerm = this.bothUserSearch ? this.bothUserSearch.value : '';
+            if (searchTerm.trim()) {
+                this.searchUsers(searchTerm, 'both');
+            }
+        }
+    }
+
     showCreateEventModal() {
         this.createEventForm.reset();
+        
+        // Clear selections
+        this.selectedGroups.clear();
+        this.selectedUsers.clear();
+        
+        // Clear selected containers and apply styling
+        const containers = [
+            this.selectedGroupsContainer, 
+            this.selectedUsersContainer, 
+            this.bothGroupsContainer, 
+            this.bothUsersContainer
+        ];
+        
+        containers.forEach(container => {
+            if (container) {
+                container.innerHTML = '';
+                container.style.cssText = `
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 0.25rem;
+                    min-height: 2rem;
+                    padding: 0.5rem;
+                    border: 1px solid #374a6b;
+                    border-radius: 8px;
+                    background: rgba(55, 74, 107, 0.1);
+                `;
+            }
+        });
+        
+        // Clear search inputs
+        if (this.groupSearch) this.groupSearch.value = '';
+        if (this.userSearch) this.userSearch.value = '';
+        if (this.bothGroupSearch) this.bothGroupSearch.value = '';
+        if (this.bothUserSearch) this.bothUserSearch.value = '';
+        
+        // Hide all results initially
+        this.hideGroupResults();
+        this.hideUserResults();
+        this.hideGroupResults('both');
+        this.hideUserResults('both');
+        
+        // Reset to groups tab and reset modal size
+        this.switchAudienceTab('groups');
+        
+        // Reset modal size to default
+        const modalContent = this.createEventModal.querySelector('.modal-content');
+        if (modalContent) {
+            modalContent.style.maxWidth = '600px';
+            modalContent.style.maxHeight = '80vh';
+            modalContent.style.overflowY = 'auto';
+        }
+        
+        // Load groups and users if not already loaded
+        if (this.allGroups.length === 0 || this.allUsers.length === 0) {
+            this.loadGroupsAndUsers();
+        } else {
+            // Display user's groups immediately
+            this.displayUserGroups();
+        }
         
         // Set default date to today
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('eventDate').value = today;
-        
-        // Populate group dropdown
-        this.populateEventGroupSelect();
         
         this.createEventModal.style.display = 'flex';
     }
 
     hideCreateEventModal() {
         this.createEventModal.style.display = 'none';
-    }
-
-    populateEventGroupSelect() {
-        const eventGroupSelect = document.getElementById('eventGroup');
-        eventGroupSelect.innerHTML = '<option value="">Personal Event</option>';
-        
-        this.userGroups.forEach(group => {
-            const option = document.createElement('option');
-            option.value = group.id;
-            option.textContent = group.name;
-            eventGroupSelect.appendChild(option);
-        });
     }
 
     async handleCreateEvent() {
@@ -653,16 +1425,17 @@ class EventsManager {
                 date: formData.get('eventDate'),
                 time: formData.get('eventTime'),
                 location: formData.get('eventLocation').trim(),
-                groupId: formData.get('eventGroup') || null,
-                visibility: formData.get('eventVisibility'),
-                type: formData.get('eventType') || 'event'
+                type: formData.get('eventType') || 'event',
+                // Include selected groups and users from target audience
+                selectedGroups: Array.from(this.selectedGroups),
+                invitedUsers: Array.from(this.selectedUsers)
             };
 
             // Validate event data
-            EventsService.validateEventData(eventData);
+            this.eventsService.validateEventData(eventData);
 
             // Create the event
-            await EventsService.createEvent(eventData, this.currentUser.uid);
+            await this.eventsService.createEvent(eventData, this.currentUser.uid);
 
             this.hideCreateEventModal();
             this.showSuccess('Event created successfully');
@@ -728,11 +1501,43 @@ class EventsManager {
                 };
             } else {
                 // This is a regular event
-                event = await EventsService.getEventDetails(eventId);
+                event = await this.eventsService.getEventDetails(eventId);
             }
             
             const group = this.userGroups.find(g => g.id === event.groupId);
             const isCreator = event.createdBy === this.currentUser.uid;
+            const isFormDue = eventId.startsWith('form-');
+            const isAnnouncement = eventId.startsWith('announcement-');
+            const isRegularEvent = !isFormDue && !isAnnouncement;
+            
+            // Determine what actions are available
+            let actionsHtml = '';
+            if (isRegularEvent && isCreator) {
+                actionsHtml = `
+                    <div class="event-actions" style="margin-top: 2rem; display: flex; gap: 1rem;">
+                        <button class="submit-btn" onclick="eventsManager.editEvent('${event.id}')">Edit Event</button>
+                        <button class="cancel-btn" onclick="eventsManager.deleteEvent('${event.id}')">Delete Event</button>
+                    </div>
+                `;
+            } else if (isFormDue) {
+                actionsHtml = `
+                    <div class="event-notice" style="margin-top: 2rem; padding: 1rem; background: rgba(255, 214, 0, 0.1); border: 1px solid #ffd600; border-radius: 8px;">
+                        <p style="margin: 0; color: #ffd600;">
+                            <strong>Form Deadline:</strong> This deadline is automatically generated from a form. 
+                            To modify or remove it, edit the original form.
+                        </p>
+                    </div>
+                `;
+            } else if (isAnnouncement) {
+                actionsHtml = `
+                    <div class="event-notice" style="margin-top: 2rem; padding: 1rem; background: rgba(100, 150, 255, 0.1); border: 1px solid #6496ff; border-radius: 8px;">
+                        <p style="margin: 0; color: #6496ff;">
+                            <strong>Scheduled Announcement:</strong> This is a scheduled announcement. 
+                            To modify it, edit the original announcement.
+                        </p>
+                    </div>
+                `;
+            }
             
             this.eventDetailsContainer.innerHTML = `
                 <div class="event-details-header">
@@ -764,12 +1569,7 @@ class EventsManager {
                     ` : ''}
                 </div>
                 
-                ${isCreator ? `
-                    <div class="event-actions" style="margin-top: 2rem; display: flex; gap: 1rem;">
-                        <button class="submit-btn" onclick="eventsManager.editEvent('${event.id}')">Edit Event</button>
-                        <button class="cancel-btn" onclick="eventsManager.deleteEvent('${event.id}')">Delete Event</button>
-                    </div>
-                ` : ''}
+                ${actionsHtml}
             `;
             
             this.eventDetailsModal.style.display = 'flex';
@@ -836,19 +1636,52 @@ class EventsManager {
         }
 
         try {
+            console.log('Attempting to delete event with ID:', eventId);
+            
             const user = await this.authManager.getCurrentUser();
             if (!user) {
                 throw new Error('You must be logged in to delete events');
+            }
+
+            // Check if this is a form due date or announcement (cannot be deleted)
+            if (eventId.startsWith('form-')) {
+                this.showError('Form due dates cannot be deleted from the events page. To remove this deadline, edit or delete the original form.');
+                return;
+            }
+            
+            if (eventId.startsWith('announcement-')) {
+                this.showError('Scheduled announcements cannot be deleted from the events page. Edit the original announcement to remove the schedule.');
+                return;
+            }
+
+            // Find the event in our local events array to verify it exists
+            const eventToDelete = this.events.find(event => event.id === eventId);
+            if (!eventToDelete) {
+                console.error('Event not found in local events array:', eventId);
+                this.showError('This event cannot be found. It may have been deleted by another user or you may not have permission to delete it.');
+                return;
+            }
+
+            console.log('Found event to delete:', eventToDelete);
+            
+            // Check if user is the creator
+            if (eventToDelete.createdBy !== user.uid) {
+                this.showError('You can only delete events that you created');
+                return;
             }
 
             await this.eventsService.deleteEvent(eventId, user.uid);
             this.showSuccess('Event deleted successfully');
             this.hideEventDetailsModal();
             // Refresh the events list
-            await this.loadAllEvents();
+            await this.loadAllData();
         } catch (error) {
             console.error('Error deleting event:', error);
-            this.showError('Failed to delete event');
+            if (error.message.includes('Event not found')) {
+                this.showError('Event no longer exists or you do not have permission to delete it');
+            } else {
+                this.showError(`Failed to delete event: ${error.message}`);
+            }
         }
     }
 }

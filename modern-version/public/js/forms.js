@@ -17,7 +17,7 @@ import { initializeAuth } from '/utils/auth-utils.js';
 
 // Initialize the page with loading states
 document.addEventListener('DOMContentLoaded', () => {
-  const containers = ['publicFormsList', 'privateFormsList', 'userFormsList', 'bookmarkedFormsList'];
+  const containers = ['allFormsList', 'userFormsList', 'bookmarkedFormsList'];
   containers.forEach(id => {
     const container = document.getElementById(id);
     if (container) {
@@ -30,15 +30,41 @@ document.addEventListener('DOMContentLoaded', () => {
 initializeAuth().then(() => {
   loadForms();
   loadBookmarkedForms();
+  checkForFormParameter();
 });
 
-// Separate public forms loading
-async function loadPublicForms() {
-  try {
-    let allPublicForms = [];
+// Check for form parameter in URL (for notifications)
+function checkForFormParameter() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const formId = urlParams.get('form');
+  
+  if (formId) {
+    // Navigate to view form page after a short delay to ensure everything is loaded
+    setTimeout(() => {
+      window.location.href = `view-form.html?id=${formId}`;
+      // Clean up the URL parameter
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+    }, 500);
+  }
+}
 
-    // Get all public forms that the user can access
-    // This includes: 1) All truly public forms, 2) User's own public forms
+// Load all forms that the user can access (created by others)
+async function loadAllAccessibleForms() {
+  try {
+    const currentUserId = auth.currentUser.uid;
+    let allAccessibleForms = [];
+
+    // Get user's groups first
+    const userGroupsQuery = query(
+      collection(db, 'groups'),
+      where('members', 'array-contains', currentUserId)
+    );
+    
+    const userGroups = await getDocs(userGroupsQuery);
+    const userGroupIds = userGroups.docs.map(doc => doc.id);
+
+    // Get all public forms (excluding user's own forms)
     const publicQuery = query(
       collection(db, 'forms'),
       where('type', '==', 'public'),
@@ -47,52 +73,66 @@ async function loadPublicForms() {
     
     const publicSnapshot = await getDocs(publicQuery);
     
-    // Filter forms to only show those the user can access
-    const accessibleForms = [];
-    
+    // Filter public forms to exclude user's own forms and check group access
     for (const formDoc of publicSnapshot.docs) {
       const formData = formDoc.data();
       
-      // Always include user's own forms
-      if (formData.createdBy === auth.currentUser.uid) {
-        accessibleForms.push(formDoc);
+      // Skip user's own forms
+      if (formData.createdBy === currentUserId) {
         continue;
       }
       
-      // For other forms, check if they're truly public (no group restriction)
-      // or if user has access to the group
+      // Check if user has access to this form
       if (!formData.group) {
         // No group restriction - truly public
-        accessibleForms.push(formDoc);
-      } else {
-        // Check if user is member of the form's group
-        try {
-          const groupDoc = await getDoc(doc(db, 'groups', formData.group));
-          if (groupDoc.exists() && groupDoc.data().members?.includes(auth.currentUser.uid)) {
-            accessibleForms.push(formDoc);
-          }
-        } catch (groupError) {
-          // If we can't access the group, skip this form
-          console.warn('Cannot access group for form:', formDoc.id);
-        }
+        allAccessibleForms.push(formDoc);
+      } else if (userGroupIds.includes(formData.group)) {
+        // User is member of the form's group
+        allAccessibleForms.push(formDoc);
       }
     }
 
+    // Get private forms from user's groups (excluding user's own forms)
+    if (userGroupIds.length > 0) {
+      const privateFormsQuery = query(
+        collection(db, 'forms'),
+        where('type', '==', 'private'),
+        where('group', 'in', userGroupIds),
+        orderBy('createdAt', 'desc')
+      );
+      const privateFormsSnapshot = await getDocs(privateFormsQuery);
+      
+      // Filter out user's own private forms
+      privateFormsSnapshot.docs.forEach(formDoc => {
+        const formData = formDoc.data();
+        if (formData.createdBy !== currentUserId) {
+          allAccessibleForms.push(formDoc);
+        }
+      });
+    }
+
+    // Sort all forms by creation date (most recent first)
+    allAccessibleForms.sort((a, b) => {
+      const aTime = a.data().createdAt?.toDate() || new Date(0);
+      const bTime = b.data().createdAt?.toDate() || new Date(0);
+      return bTime - aTime;
+    });
+
     // Create a snapshot-like object to work with existing displayForms function
     const filteredSnapshot = {
-      docs: accessibleForms,
-      empty: accessibleForms.length === 0,
+      docs: allAccessibleForms,
+      empty: allAccessibleForms.length === 0,
       forEach: function(callback) {
         this.docs.forEach(callback);
       }
     };
     
-    displayForms(filteredSnapshot, 'publicFormsList');
+    displayForms(filteredSnapshot, 'allFormsList');
   } catch (error) {
-    console.error("Error loading public forms:", error);
-    const container = document.getElementById('publicFormsList');
+    console.error("Error loading accessible forms:", error);
+    const container = document.getElementById('allFormsList');
     if (container) {
-      container.innerHTML = '<p class="error">Error loading public forms</p>';
+      container.innerHTML = '<p class="error">Error loading forms</p>';
     }
   }
 }
@@ -102,34 +142,8 @@ async function loadForms() {
   if (!auth.currentUser) return;
 
   try {
-    // Load public forms
-    await loadPublicForms();
-
-    // Load user's groups first
-    const userGroupsQuery = query(
-      collection(db, 'groups'),
-      where('members', 'array-contains', auth.currentUser.uid)
-    );
-    
-    const userGroups = await getDocs(userGroupsQuery);
-    const userGroupIds = userGroups.docs.map(doc => doc.id);
-
-    // Load private forms
-    if (userGroupIds.length > 0) {
-      const privateFormsQuery = query(
-        collection(db, 'forms'),
-        where('type', '==', 'private'),
-        where('group', 'in', userGroupIds), // Use 'in' operator instead of multiple queries
-        orderBy('createdAt', 'desc')
-      );
-      const privateFormsSnapshot = await getDocs(privateFormsQuery);
-      displayForms(privateFormsSnapshot, 'privateFormsList');
-    } else {
-      const container = document.getElementById('privateFormsList');
-      if (container) {
-        container.innerHTML = '<p class="no-forms">No private forms available</p>';
-      }
-    }
+    // Load all accessible forms (from others)
+    await loadAllAccessibleForms();
 
     // Load user's created forms
     const userFormsQuery = query(
@@ -142,7 +156,7 @@ async function loadForms() {
 
   } catch (error) {
     console.error("Error loading forms:", error);
-    const containers = ['privateFormsList', 'userFormsList'];
+    const containers = ['allFormsList', 'userFormsList'];
     containers.forEach(id => {
       const container = document.getElementById(id);
       if (container) {
@@ -184,6 +198,19 @@ document.querySelector('.forms-search input').addEventListener('input', (e) => {
 
     // Check if form is bookmarked
     const isBookmarked = await checkIfBookmarked(doc.id);
+    
+    // Get group name if form is assigned to a group
+    let groupName = '';
+    if (form.group) {
+      try {
+        const groupDoc = await getDoc(doc(db, 'groups', form.group));
+        if (groupDoc.exists()) {
+          groupName = groupDoc.data().name;
+        }
+      } catch (error) {
+        console.error('Error fetching group info:', error);
+      }
+    }
 
     const formCard = document.createElement('div');
     formCard.className = 'form-card';
@@ -197,6 +224,10 @@ document.querySelector('.forms-search input').addEventListener('input', (e) => {
         </button>
       </div>
       <p class="form-description">${form.description || 'No description provided'}</p>
+      ${groupName ? `<div class="form-group-badge">
+        <span class="group-icon">👥</span>
+        <span class="group-name">${groupName}</span>
+      </div>` : ''}
       <div class="form-meta">
         <span class="form-date">Created: ${formDate}</span>
         <span class="form-due">Due: ${dueDate}</span>
@@ -336,57 +367,116 @@ async function loadBookmarkedForms() {
       return;
     }
 
-    // Get bookmarked forms
-    const formsPromises = bookmarkedFormIds.map(formId => 
-      getDoc(doc(db, 'forms', formId))
+    // Get user's groups for permission checking
+    const userGroupsQuery = query(
+      collection(db, 'groups'),
+      where('members', 'array-contains', auth.currentUser.uid)
     );
-    
-    const formDocs = await Promise.all(formsPromises);
-    
-    container.innerHTML = '';
-    
-    formDocs.forEach(docSnap => {
-      if (docSnap.exists()) {
-        const form = docSnap.data();
-        const formDate = form.createdAt.toDate().toLocaleDateString();
-        const dueDate = form.dueDate ? form.dueDate.toDate().toLocaleDateString() : 'No due date';
+    const userGroups = await getDocs(userGroupsQuery);
+    const userGroupIds = userGroups.docs.map(doc => doc.id);
 
-        const formCard = document.createElement('div');
-        formCard.className = 'form-card';
-        formCard.innerHTML = `
-          <h3>${form.title}</h3>
-          <p class="form-description">${form.description || 'No description provided'}</p>
-          <div class="form-meta">
-            <span class="form-date">Created: ${formDate}</span>
-            <span class="form-due">Due: ${dueDate}</span>
-          </div>
-          <div class="form-creator">
-            <span class="creator-name">By: ${form.creatorName || 'Unknown'}</span>
-          </div>
-          <div class="form-actions">
-            <button class="view-form-btn" data-form-id="${docSnap.id}">View Form</button>
-            <button class="remove-bookmark-btn" data-form-id="${docSnap.id}">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
-              </svg>
-              Remove Bookmark
-            </button>
-          </div>
-        `;
+    // Get bookmarked forms with permission filtering
+    const accessibleBookmarkedForms = [];
+    const inaccessibleFormIds = [];
 
-        // Add click event for viewing the form
-        formCard.querySelector('.view-form-btn').addEventListener('click', () => {
-          window.location.href = `view-form.html?id=${doc.id}`;
-        });
+    for (const formId of bookmarkedFormIds) {
+      try {
+        const formDoc = await getDoc(doc(db, 'forms', formId));
+        
+        if (formDoc.exists()) {
+          const formData = formDoc.data();
+          let hasAccess = false;
 
-        // Add remove bookmark functionality
-        formCard.querySelector('.remove-bookmark-btn').addEventListener('click', async () => {
-          await removeBookmark(doc.id);
-          loadBookmarkedForms(); // Refresh the bookmarked forms list
-        });
+          // Check if user has access to this form
+          if (formData.createdBy === auth.currentUser.uid) {
+            // User created this form
+            hasAccess = true;
+          } else if (formData.type === 'public') {
+            // Public form - check if no group restriction or user is in the group
+            if (!formData.group) {
+              hasAccess = true;
+            } else if (userGroupIds.includes(formData.group)) {
+              hasAccess = true;
+            }
+          } else if (formData.type === 'private' && formData.group && userGroupIds.includes(formData.group)) {
+            // Private form - user must be in the group
+            hasAccess = true;
+          }
 
-        container.appendChild(formCard);
+          if (hasAccess) {
+            accessibleBookmarkedForms.push({ id: formId, data: formData });
+          } else {
+            inaccessibleFormIds.push(formId);
+          }
+        } else {
+          // Form doesn't exist anymore
+          inaccessibleFormIds.push(formId);
+        }
+      } catch (error) {
+        console.warn(`Cannot access bookmarked form ${formId}:`, error);
+        inaccessibleFormIds.push(formId);
       }
+    }
+
+    // Clean up bookmarks for inaccessible forms
+    if (inaccessibleFormIds.length > 0) {
+      try {
+        const updatedBookmarks = bookmarkedFormIds.filter(id => !inaccessibleFormIds.includes(id));
+        await updateDoc(userDocRef, {
+          bookmarkedForms: updatedBookmarks
+        });
+        console.log(`Removed ${inaccessibleFormIds.length} inaccessible bookmarks`);
+      } catch (cleanupError) {
+        console.warn('Could not clean up inaccessible bookmarks:', cleanupError);
+      }
+    }
+
+    container.innerHTML = '';
+
+    if (accessibleBookmarkedForms.length === 0) {
+      container.innerHTML = '<p>No accessible bookmarked forms.</p>';
+      return;
+    }
+    
+    accessibleBookmarkedForms.forEach(({ id, data: form }) => {
+      const formDate = form.createdAt.toDate().toLocaleDateString();
+      const dueDate = form.dueDate ? form.dueDate.toDate().toLocaleDateString() : 'No due date';
+
+      const formCard = document.createElement('div');
+      formCard.className = 'form-card';
+      formCard.innerHTML = `
+        <h3>${form.title}</h3>
+        <p class="form-description">${form.description || 'No description provided'}</p>
+        <div class="form-meta">
+          <span class="form-date">Created: ${formDate}</span>
+          <span class="form-due">Due: ${dueDate}</span>
+        </div>
+        <div class="form-creator">
+          <span class="creator-name">By: ${form.creatorName || 'Unknown'}</span>
+        </div>
+        <div class="form-actions">
+          <button class="view-form-btn" data-form-id="${id}">View Form</button>
+          <button class="remove-bookmark-btn" data-form-id="${id}">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
+            </svg>
+            Remove Bookmark
+          </button>
+        </div>
+      `;
+
+      // Add click event for viewing the form
+      formCard.querySelector('.view-form-btn').addEventListener('click', () => {
+        window.location.href = `view-form.html?id=${id}`;
+      });
+
+      // Add remove bookmark functionality
+      formCard.querySelector('.remove-bookmark-btn').addEventListener('click', async () => {
+        await removeBookmark(id);
+        loadBookmarkedForms(); // Refresh the bookmarked forms list
+      });
+
+      container.appendChild(formCard);
     });
 
   } catch (error) {

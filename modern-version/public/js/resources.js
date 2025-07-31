@@ -1,5 +1,10 @@
 import ResourcesService from '/services/resources-service.js';
 import authManager from '/utils/auth-manager.js';
+import { db } from '/config/firebase-config.js';
+import { 
+    collection, 
+    getDocs 
+} from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
 class ResourcesManager {
     constructor() {
@@ -17,6 +22,7 @@ class ResourcesManager {
     initializeElements() {
         // Main elements
         this.searchInput = document.getElementById('searchInput');
+        this.fileFilter = document.getElementById('fileFilter');
         this.uploadBtn = document.getElementById('uploadBtn');
         this.fileInput = document.getElementById('fileInput');
         this.dropZone = document.getElementById('dropZone');
@@ -56,6 +62,13 @@ class ResourcesManager {
         if (this.searchInput) {
             this.searchInput.addEventListener('input', (e) => {
                 this.filterFiles(e.target.value);
+            });
+        }
+
+        // Filter functionality
+        if (this.fileFilter) {
+            this.fileFilter.addEventListener('change', (e) => {
+                this.filterByType(e.target.value);
             });
         }
 
@@ -141,10 +154,40 @@ class ResourcesManager {
                 
                 // Load user files
                 await this.loadFiles();
+                
+                // Check for resource parameter in URL (for notifications)
+                this.checkForResourceParameter();
             } else {
                 this.showAuthAlert();
             }
         });
+    }
+
+    checkForResourceParameter() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const resourceId = urlParams.get('resource');
+        const fileId = urlParams.get('file'); // Legacy support
+        
+        const targetId = resourceId || fileId;
+        if (targetId) {
+            // Find and highlight the resource after a short delay to ensure everything is loaded
+            setTimeout(() => {
+                const fileElement = document.querySelector(`[data-file-id="${targetId}"]`);
+                if (fileElement) {
+                    fileElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Highlight the file briefly
+                    fileElement.style.backgroundColor = 'rgba(255, 214, 0, 0.2)';
+                    fileElement.style.border = '2px solid #ffd600';
+                    setTimeout(() => {
+                        fileElement.style.backgroundColor = '';
+                        fileElement.style.border = '';
+                    }, 3000);
+                }
+                // Clean up the URL parameter
+                const newUrl = window.location.pathname;
+                window.history.replaceState({}, document.title, newUrl);
+            }, 1000);
+        }
     }
 
     showAuthAlert() {
@@ -181,6 +224,42 @@ class ResourcesManager {
         this.renderFiles();
     }
 
+    filterByType(filterType) {
+        const currentUser = this.currentUser;
+        if (!currentUser) return;
+
+        switch (filterType) {
+            case 'my-files':
+                this.filteredFiles = this.files.filter(file => file.userId === currentUser.uid);
+                break;
+            case 'shared-with-me':
+                this.filteredFiles = this.files.filter(file => 
+                    file.userId !== currentUser.uid && (
+                        file.isShared === true ||
+                        (file.sharedWith && file.sharedWith.includes(currentUser.uid)) ||
+                        (file.shareType === 'group' && file.groupId) // Would need to check user's groups
+                    )
+                );
+                break;
+            case 'shared-by-me':
+                this.filteredFiles = this.files.filter(file => 
+                    file.userId === currentUser.uid && file.isShared === true
+                );
+                break;
+            case 'all':
+            default:
+                this.filteredFiles = [...this.files];
+                break;
+        }
+        
+        // Apply any existing search filter
+        if (this.searchInput && this.searchInput.value.trim()) {
+            this.filteredFiles = ResourcesService.searchFiles(this.filteredFiles, this.searchInput.value);
+        }
+        
+        this.renderFiles();
+    }
+
     renderFiles() {
         if (this.filteredFiles.length === 0) {
             this.renderEmptyState();
@@ -200,6 +279,11 @@ class ResourcesManager {
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                            </svg>
+                        </button>
+                        <button class="file-action-btn" onclick="resourcesManager.showShareModal('${file.id}')" title="Share">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314a2.25 2.25 0 1 1 .434 2.44L7.217 13.747m0-2.186 9.566 5.314m-9.566-5.314L7.217 13.747M10.5 12a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
                             </svg>
                         </button>
                         <button class="file-action-btn" onclick="resourcesManager.downloadFile('${file.id}')" title="Download">
@@ -242,7 +326,7 @@ class ResourcesManager {
         `;
     }
 
-    handleFileSelection(files) {
+    async handleFileSelection(files) {
         if (!files || files.length === 0) return;
 
         // Validate files
@@ -258,33 +342,51 @@ class ResourcesManager {
 
         if (validFiles.length === 0) return;
 
-        // Store files for sharing modal
-        this.selectedFiles = validFiles;
-        
-        // Show sharing options modal
-        this.showShareModal();
+        try {
+            // First upload the files and get their IDs
+            const uploadedFileIds = await this.uploadFiles(validFiles);
+            
+            if (uploadedFileIds && uploadedFileIds.length > 0) {
+                // Store the file IDs for sharing
+                this.selectedFiles = uploadedFileIds;
+                
+                // Show sharing options modal
+                this.showShareModal();
+            }
+        } catch (error) {
+            console.error('Error uploading files:', error);
+            // Don't show share modal if upload failed
+        }
     }
 
     async uploadFiles(files) {
-        if (this.isUploading) return;
+        if (this.isUploading) return [];
 
         this.isUploading = true;
         this.uploadQueue = [...files];
         this.showUploadModal();
 
+        const uploadedFileIds = [];
+
         try {
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
-                await this.uploadSingleFile(file, i);
+                const fileId = await this.uploadSingleFile(file, i);
+                if (fileId) {
+                    uploadedFileIds.push(fileId);
+                }
             }
 
             // Reload files list
             await this.loadFiles();
             this.hideUploadModal();
             this.showSuccess(`Successfully uploaded ${files.length} file(s)`);
+            
+            return uploadedFileIds;
         } catch (error) {
             console.error('Upload error:', error);
             this.showError('Upload failed: ' + error.message);
+            throw error;
         } finally {
             this.isUploading = false;
         }
@@ -312,7 +414,7 @@ class ResourcesManager {
         const progressStatus = progressItem.querySelector('.progress-status');
 
         try {
-            await ResourcesService.uploadFile(
+            const result = await ResourcesService.uploadFile(
                 file,
                 this.currentUser.uid,
                 (progress) => {
@@ -323,6 +425,8 @@ class ResourcesManager {
 
             progressStatus.textContent = 'Complete';
             progressBar.style.width = '100%';
+            
+            return result.id; // Return the file ID
         } catch (error) {
             progressStatus.textContent = 'Failed';
             progressBar.style.background = '#f44336';
@@ -465,7 +569,10 @@ class ResourcesManager {
     }
 
     // Sharing modal functions
-    async showShareModal() {
+    async showShareModal(fileId = null) {
+        // Store the file ID if sharing a specific file
+        this.shareFileId = fileId;
+        
         await this.loadGroups();
         await this.loadUsers();
         this.shareModal.style.display = 'flex';
@@ -474,6 +581,12 @@ class ResourcesManager {
     hideShareModal() {
         this.shareModal.style.display = 'none';
         this.selectedFiles = [];
+        this.shareFileId = null;
+        
+        // Reset form
+        this.shareType.value = 'group';
+        this.shareDescription.value = '';
+        this.updateShareOptions();
     }
 
     updateShareOptions() {
@@ -487,7 +600,7 @@ class ResourcesManager {
         try {
             // Load user's groups
             const { getDocs, query, where, collection } = await import('https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js');
-            const { db } = await import('./config/firebase-config.js');
+            const { db } = await import('/config/firebase-config.js');
             
             const groupsQuery = query(
                 collection(db, 'groups'),
@@ -511,38 +624,168 @@ class ResourcesManager {
 
     async loadUsers() {
         try {
-            // For now, we'll just show a placeholder. In a real app, you'd load users
-            this.userSelect.innerHTML = '<p>User selection feature coming soon...</p>';
+            const { getDocs, collection } = await import('https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js');
+            const { db } = await import('/config/firebase-config.js');
+            
+            // Create a search-based interface for users
+            this.userSelection.innerHTML = `
+                <label for="userSelect">Search Users:</label>
+                <div class="user-search-container">
+                    <input type="text" id="userSearchInput" class="user-search-input" placeholder="Type at least 2 characters to search users..." />
+                    <div id="userSearchResults" class="user-search-results" style="display: none;"></div>
+                    <div id="selectedUsersList" class="selected-users-list"></div>
+                </div>
+            `;
+            
+            const userSearchInput = document.getElementById('userSearchInput');
+            const userSearchResults = document.getElementById('userSearchResults');
+            const selectedUsersList = document.getElementById('selectedUsersList');
+            let selectedUsers = new Set();
+            let allUsers = [];
+            
+            // Load all users once
+            const usersSnapshot = await getDocs(collection(db, 'users'));
+            usersSnapshot.forEach(doc => {
+                const user = doc.data();
+                if (doc.id !== this.currentUser.uid) {
+                    allUsers.push({
+                        id: doc.id,
+                        name: user.displayName || user.email,
+                        email: user.email
+                    });
+                }
+            });
+            
+            // Search functionality
+            userSearchInput.addEventListener('input', (e) => {
+                const searchTerm = e.target.value.trim();
+                
+                if (searchTerm.length < 2) {
+                    userSearchResults.style.display = 'none';
+                    return;
+                }
+                
+                const filteredUsers = allUsers.filter(user => 
+                    !selectedUsers.has(user.id) && (
+                        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        user.email.toLowerCase().includes(searchTerm.toLowerCase())
+                    )
+                );
+                
+                if (filteredUsers.length === 0) {
+                    userSearchResults.innerHTML = '<div class="no-results">No users found</div>';
+                } else {
+                    userSearchResults.innerHTML = filteredUsers.map(user => `
+                        <div class="user-search-result" data-user-id="${user.id}">
+                            <span class="user-name">${user.name}</span>
+                            <span class="user-email">${user.email}</span>
+                        </div>
+                    `).join('');
+                }
+                
+                userSearchResults.style.display = 'block';
+            });
+            
+            // Handle user selection
+            userSearchResults.addEventListener('click', (e) => {
+                const userResult = e.target.closest('.user-search-result');
+                if (userResult) {
+                    const userId = userResult.dataset.userId;
+                    const user = allUsers.find(u => u.id === userId);
+                    
+                    selectedUsers.add(userId);
+                    
+                    const selectedUserEl = document.createElement('div');
+                    selectedUserEl.className = 'selected-user';
+                    selectedUserEl.innerHTML = `
+                        <span>${user.name}</span>
+                        <button type="button" class="remove-user-btn" data-user-id="${userId}">×</button>
+                    `;
+                    selectedUsersList.appendChild(selectedUserEl);
+                    
+                    userSearchInput.value = '';
+                    userSearchResults.style.display = 'none';
+                }
+            });
+            
+            // Handle user removal
+            selectedUsersList.addEventListener('click', (e) => {
+                if (e.target.classList.contains('remove-user-btn')) {
+                    const userId = e.target.dataset.userId;
+                    selectedUsers.delete(userId);
+                    e.target.closest('.selected-user').remove();
+                }
+            });
+            
+            // Hide results when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.user-search-container')) {
+                    userSearchResults.style.display = 'none';
+                }
+            });
+            
+            // Store reference for later access
+            this.getSelectedUsers = () => Array.from(selectedUsers);
+            
         } catch (error) {
             console.error('Error loading users:', error);
         }
     }
 
     async handleShareConfirm() {
-        const shareType = this.shareType.value;
-        const description = this.shareDescription.value;
-        
-        let shareData = {
-            type: shareType,
-            description: description
-        };
+        try {
+            const shareType = this.shareType.value;
+            const description = this.shareDescription.value;
+            
+            let shareData = {
+                type: shareType,
+                description: description
+            };
 
-        if (shareType === 'group') {
-            const selectedGroup = this.groupSelect.value;
-            if (!selectedGroup) {
-                this.showError('Please select a group');
+            if (shareType === 'group') {
+                const selectedGroup = this.groupSelect.value;
+                if (!selectedGroup) {
+                    this.showError('Please select a group');
+                    return;
+                }
+                shareData.groupId = selectedGroup;
+            } else if (shareType === 'specific') {
+                const selectedUsers = this.getSelectedUsers ? this.getSelectedUsers() : [];
+                
+                if (selectedUsers.length === 0) {
+                    this.showError('Please select at least one user');
+                    return;
+                }
+                shareData.userIds = selectedUsers;
+            }
+
+            // Determine which files to share
+            let filesToShare = [];
+            if (this.shareFileId) {
+                // Sharing a specific file
+                filesToShare = [this.shareFileId];
+            } else if (this.selectedFiles && this.selectedFiles.length > 0) {
+                // Sharing selected files
+                filesToShare = this.selectedFiles;
+            } else {
+                this.showError('No files selected for sharing');
                 return;
             }
-            shareData.groupId = selectedGroup;
-        } else if (shareType === 'specific') {
-            // Handle specific user sharing when implemented
-            this.showError('Specific user sharing not yet implemented');
-            return;
-        }
 
-        // Upload files with sharing data
-        await this.uploadFilesWithSharing(this.selectedFiles, shareData);
-        this.hideShareModal();
+            // Share the files
+            for (const fileId of filesToShare) {
+                await ResourcesService.shareFile(fileId, shareData, this.currentUser.uid);
+            }
+
+            this.showSuccess(`Successfully shared ${filesToShare.length} file(s)`);
+            this.hideShareModal();
+            
+            // Reload files to show updated sharing status
+            await this.loadFiles();
+        } catch (error) {
+            console.error('Error sharing files:', error);
+            this.showError('Failed to share files: ' + error.message);
+        }
     }
 
     async uploadFilesWithSharing(files, shareData) {

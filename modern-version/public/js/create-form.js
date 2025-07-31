@@ -3,10 +3,22 @@ import {
   collection,
   addDoc,
   getDocs,
-  Timestamp 
+  query,
+  where,
+  Timestamp,
+  getDoc,
+  doc 
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
-let currentFormType = 'public';
+// Import notification service for sending form notifications
+let NotificationService;
+try {
+  const module = await import('/services/notification-service.js');
+  NotificationService = module.NotificationService;
+} catch (error) {
+  console.warn('NotificationService not available:', error);
+}
+
 let questions = [];
 let isInitialized = false;
 
@@ -56,39 +68,15 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-// Add this near the top of your file
-auth.onAuthStateChanged((user) => {
-  if (!user) {
-    showAuthAlert();
-  }
-});
-
 function initializePage() {
   if (isInitialized) return; // Prevent multiple initializations
   
-  initializeFormTypeButtons();
   initializeQuestionTypeButtons();
   initializeCancelButton();
   initializeFormSubmission();
-  loadGroups();
+  initializeAudienceSelector();
   
   isInitialized = true;
-}
-
-function initializeFormTypeButtons() {
-  const formTypeButtons = document.querySelectorAll('.form-type-btn');
-  formTypeButtons.forEach(button => {
-    button.addEventListener('click', (e) => {
-      e.preventDefault();
-      formTypeButtons.forEach(btn => btn.classList.remove('active'));
-      button.classList.add('active');
-      currentFormType = button.getAttribute('data-type');
-      const groupSelector = document.getElementById('groupSelector');
-      if (groupSelector) {
-        groupSelector.style.display = currentFormType === 'private' ? 'block' : 'none';
-      }
-    });
-  });
 }
 
 function initializeQuestionTypeButtons() {
@@ -121,6 +109,314 @@ function initializeFormSubmission() {
   if (form) {
     form.addEventListener('submit', handleFormSubmit);
   }
+}
+
+// Audience Selector Functionality
+let selectedGroups = new Set();
+let selectedUsers = new Set();
+let allGroups = [];
+let allUsers = [];
+
+function initializeAudienceSelector() {
+  console.log('Initializing audience selector...');
+  
+  // Check if audience selector exists
+  const audienceSelector = document.querySelector('.audience-selector');
+  if (!audienceSelector) {
+    console.error('Audience selector not found in DOM');
+    return;
+  }
+  
+  // Initialize audience tab switching
+  const audienceTabs = document.querySelectorAll('.audience-tab');
+  console.log('Found audience tabs:', audienceTabs.length);
+  
+  if (audienceTabs.length === 0) {
+    console.error('No audience tabs found');
+    return;
+  }
+  
+  audienceTabs.forEach(tab => {
+    tab.addEventListener('click', (e) => {
+      e.preventDefault();
+      const target = tab.getAttribute('data-target');
+      console.log('Tab clicked:', target);
+      switchAudienceTab(target);
+    });
+  });
+
+  // Initialize search functionality
+  setupGroupSearch();
+  setupUserSearch();
+  
+  // Load data
+  loadGroupsAndUsers();
+  
+  console.log('Audience selector initialized successfully');
+}
+
+function switchAudienceTab(tabName) {
+  // Update tab buttons
+  document.querySelectorAll('.audience-tab').forEach(tab => {
+    tab.classList.remove('active');
+  });
+  document.querySelector(`[data-target="${tabName}"]`).classList.add('active');
+
+  // Update content sections
+  document.querySelectorAll('.audience-section').forEach(section => {
+    section.classList.remove('active');
+  });
+  document.getElementById(`${tabName}-selection`).classList.add('active');
+
+  // Clear searches when switching tabs
+  clearSearches();
+}
+
+function setupGroupSearch() {
+  console.log('Setting up group search...');
+  
+  const groupSearch = document.getElementById('groupSearch');
+  const groupSearchBoth = document.getElementById('groupSearchBoth');
+  
+  console.log('Group search elements:', { groupSearch: !!groupSearch, groupSearchBoth: !!groupSearchBoth });
+  
+  if (groupSearch) {
+    groupSearch.addEventListener('input', (e) => {
+      searchGroups(e.target.value, 'groups');
+    });
+  }
+  
+  if (groupSearchBoth) {
+    groupSearchBoth.addEventListener('input', (e) => {
+      searchGroups(e.target.value, 'both');
+    });
+  }
+}
+
+function setupUserSearch() {
+  console.log('Setting up user search...');
+  
+  const userSearch = document.getElementById('userSearch');
+  const userSearchBoth = document.getElementById('userSearchBoth');
+  
+  console.log('User search elements:', { userSearch: !!userSearch, userSearchBoth: !!userSearchBoth });
+  
+  if (userSearch) {
+    userSearch.addEventListener('input', (e) => {
+      searchUsers(e.target.value, 'users');
+    });
+  }
+  
+  if (userSearchBoth) {
+    userSearchBoth.addEventListener('input', (e) => {
+      searchUsers(e.target.value, 'both');
+    });
+  }
+}
+
+async function loadGroupsAndUsers() {
+  console.log('Loading groups and users...');
+  
+  try {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      console.error('No authenticated user found');
+      return;
+    }
+
+    console.log('Current user:', currentUser.email);
+
+    // Load only groups where the current user is a member
+    const groupsQuery = query(
+      collection(db, 'groups'),
+      where('members', 'array-contains', currentUser.uid)
+    );
+    const groupsSnapshot = await getDocs(groupsQuery);
+    allGroups = [];
+    groupsSnapshot.forEach(doc => {
+      const groupData = doc.data();
+      // Double-check that user is actually a member (extra security)
+      if (groupData.members && groupData.members.includes(currentUser.uid)) {
+        allGroups.push({ id: doc.id, ...groupData });
+      }
+    });
+
+    console.log(`Loaded ${allGroups.length} groups where user is a member`);
+
+    // Load all users (for individual user selection)
+    const usersSnapshot = await getDocs(collection(db, 'users'));
+    allUsers = [];
+    usersSnapshot.forEach(doc => {
+      const userData = doc.data();
+      // Don't include the current user in the list (they can't send forms to themselves)
+      if (doc.id !== currentUser.uid) {
+        allUsers.push({ id: doc.id, ...userData });
+      }
+    });
+
+    console.log(`Loaded ${allUsers.length} users (excluding current user)`);
+  } catch (error) {
+    console.error('Error loading groups and users:', error);
+  }
+}
+
+function searchGroups(query, mode = 'groups') {
+  const filteredGroups = allGroups.filter(group => 
+    group.name?.toLowerCase().includes(query.toLowerCase()) ||
+    group.description?.toLowerCase().includes(query.toLowerCase())
+  );
+  
+  displayGroupResults(filteredGroups, mode);
+}
+
+function searchUsers(query, mode = 'users') {
+  const filteredUsers = allUsers.filter(user => 
+    user.displayName?.toLowerCase().includes(query.toLowerCase()) ||
+    user.email?.toLowerCase().includes(query.toLowerCase())
+  );
+  
+  displayUserResults(filteredUsers, mode);
+}
+
+function displayGroupResults(groups, mode = 'groups') {
+  const resultsContainer = mode === 'both' ? 
+    document.getElementById('groupResultsBoth') : 
+    document.getElementById('groupResults');
+  
+  if (!resultsContainer) return;
+
+  if (groups.length === 0) {
+    resultsContainer.innerHTML = '<div class="no-results">No groups found</div>';
+  } else {
+    resultsContainer.innerHTML = groups.map(group => `
+      <div class="group-result" onclick="selectGroup('${group.id}', '${mode}')">
+        <div class="group-result-name">${group.name}</div>
+        <div class="group-result-description">${group.description || 'No description'}</div>
+      </div>
+    `).join('');
+  }
+  
+  resultsContainer.classList.add('show');
+}
+
+function displayUserResults(users, mode = 'users') {
+  const resultsContainer = mode === 'both' ? 
+    document.getElementById('userResultsBoth') : 
+    document.getElementById('userResults');
+  
+  if (!resultsContainer) return;
+
+  if (users.length === 0) {
+    resultsContainer.innerHTML = '<div class="no-results">No users found</div>';
+  } else {
+    resultsContainer.innerHTML = users.map(user => `
+      <div class="user-result" onclick="selectUser('${user.id}', '${mode}')">
+        <div class="user-result-name">${user.displayName || 'Unknown User'}</div>
+        <div class="user-result-email">${user.email}</div>
+      </div>
+    `).join('');
+  }
+  
+  resultsContainer.classList.add('show');
+}
+
+window.selectGroup = function(groupId, mode = 'groups') {
+  selectedGroups.add(groupId);
+  updateSelectedGroups(mode);
+  clearGroupSearch(mode);
+};
+
+window.selectUser = function(userId, mode = 'users') {
+  selectedUsers.add(userId);
+  updateSelectedUsers(mode);
+  clearUserSearch(mode);
+};
+
+function updateSelectedGroups(mode = 'groups') {
+  const containers = mode === 'both' ? 
+    [document.getElementById('selectedGroupsBoth')] : 
+    mode === 'groups' ? 
+    [document.getElementById('selectedGroups')] : 
+    [document.getElementById('selectedGroups'), document.getElementById('selectedGroupsBoth')];
+  
+  containers.forEach(container => {
+    if (!container) return;
+    
+    container.innerHTML = Array.from(selectedGroups).map(groupId => {
+      const group = allGroups.find(g => g.id === groupId);
+      return group ? `
+        <div class="selected-group">
+          <span>${group.name}</span>
+          <button type="button" onclick="removeGroup('${groupId}')">&times;</button>
+        </div>
+      ` : '';
+    }).join('');
+  });
+}
+
+function updateSelectedUsers(mode = 'users') {
+  const containers = mode === 'both' ? 
+    [document.getElementById('selectedUsersBoth')] : 
+    mode === 'users' ? 
+    [document.getElementById('selectedUsers')] : 
+    [document.getElementById('selectedUsers'), document.getElementById('selectedUsersBoth')];
+  
+  containers.forEach(container => {
+    if (!container) return;
+    
+    container.innerHTML = Array.from(selectedUsers).map(userId => {
+      const user = allUsers.find(u => u.id === userId);
+      return user ? `
+        <div class="selected-user">
+          <span>${user.displayName || user.email}</span>
+          <button type="button" onclick="removeUser('${userId}')">&times;</button>
+        </div>
+      ` : '';
+    }).join('');
+  });
+}
+
+window.removeGroup = function(groupId) {
+  selectedGroups.delete(groupId);
+  updateSelectedGroups();
+  updateSelectedGroups('both');
+};
+
+window.removeUser = function(userId) {
+  selectedUsers.delete(userId);
+  updateSelectedUsers();
+  updateSelectedUsers('both');
+};
+
+function clearGroupSearch(mode = 'groups') {
+  const searchInput = mode === 'both' ? 
+    document.getElementById('groupSearchBoth') : 
+    document.getElementById('groupSearch');
+  const resultsContainer = mode === 'both' ? 
+    document.getElementById('groupResultsBoth') : 
+    document.getElementById('groupResults');
+  
+  if (searchInput) searchInput.value = '';
+  if (resultsContainer) resultsContainer.classList.remove('show');
+}
+
+function clearUserSearch(mode = 'users') {
+  const searchInput = mode === 'both' ? 
+    document.getElementById('userSearchBoth') : 
+    document.getElementById('userSearch');
+  const resultsContainer = mode === 'both' ? 
+    document.getElementById('userResultsBoth') : 
+    document.getElementById('userResults');
+  
+  if (searchInput) searchInput.value = '';
+  if (resultsContainer) resultsContainer.classList.remove('show');
+}
+
+function clearSearches() {
+  clearGroupSearch('groups');
+  clearGroupSearch('both');
+  clearUserSearch('users');
+  clearUserSearch('both');
 }
 
 // Add question function with improved functionality
@@ -273,6 +569,56 @@ document.addEventListener('click', (e) => {
   }
 });
 
+/**
+ * Send form notifications to all target users (group members + individual users)
+ * @param {string} formId - The ID of the created form
+ * @param {string} formTitle - The title of the form
+ * @param {string} senderId - ID of the user who created the form
+ * @param {string} senderName - Name of the user who created the form
+ */
+async function sendFormNotifications(formId, formTitle, senderId, senderName) {
+  try {
+    const allRecipients = new Set(); // Use Set to avoid duplicate notifications
+    
+    // Get all group members from selected groups
+    for (const groupId of selectedGroups) {
+      try {
+        const groupDoc = await getDoc(doc(db, 'groups', groupId));
+        if (groupDoc.exists()) {
+          const groupData = groupDoc.data();
+          if (groupData.members && Array.isArray(groupData.members)) {
+            groupData.members.forEach(memberId => {
+              if (memberId !== senderId) { // Don't notify the form creator
+                allRecipients.add(memberId);
+              }
+            });
+          }
+        }
+      } catch (error) {
+        console.error(`Error fetching group ${groupId}:`, error);
+      }
+    }
+    
+    // Add individual users from selected users
+    selectedUsers.forEach(userId => {
+      if (userId !== senderId) { // Don't notify the form creator
+        allRecipients.add(userId);
+      }
+    });
+    
+    // Send notifications to all recipients
+    const notificationPromises = Array.from(allRecipients).map(recipientId => 
+      NotificationService.createNewFormNotification(formId, formTitle, senderId, senderName, recipientId)
+    );
+    
+    await Promise.all(notificationPromises);
+    console.log(`Sent notifications to ${allRecipients.size} recipients for form: ${formTitle}`);
+    
+  } catch (error) {
+    console.error('Error sending form notifications:', error);
+  }
+}
+
 /** @type {(e: SubmitEvent) => Promise<void>} */
 // Form submission handler
 async function handleFormSubmit(e) {
@@ -336,45 +682,34 @@ async function handleFormSubmit(e) {
   });
 
   try {
+    // Validate audience selection
+    if (selectedGroups.size === 0 && selectedUsers.size === 0) {
+      alert('Please select at least one group or user as the target audience.');
+      return;
+    }
+
     const formData = {
       title: formTitle,
       description: formDescription,
       dueDate: Timestamp.fromDate(new Date(dueDate)),
-      type: currentFormType,
       createdBy: auth.currentUser.uid,
       creatorName: auth.currentUser.displayName || auth.currentUser.email || 'Anonymous',
       createdAt: Timestamp.now(),
       questions: formQuestions,
-      group: currentFormType === 'private' ? document.getElementById('group').value : null
+      targetGroups: Array.from(selectedGroups),
+      targetUsers: Array.from(selectedUsers)
     };
 
-    await addDoc(collection(db, 'forms'), formData);
+    const docRef = await addDoc(collection(db, 'forms'), formData);
+    const formId = docRef.id;
+    
+    // Send notifications to all target recipients
+    await sendFormNotifications(formId, formTitle, selectedGroups, selectedUsers);
+    
     window.location.href = 'forms.html';
   } catch (error) {
     console.error('Error creating form:', error);
     alert('Error creating form: ' + error.message);
-  }
-}
-
-// Update your loadGroups function to check auth state
-async function loadGroups() {
-  const user = auth.currentUser;
-  if (!user) return;
-
-  const groupSelect = document.getElementById('group');
-  if (!groupSelect) return;
-
-  try {
-    const querySnapshot = await getDocs(collection(db, 'groups'));
-    querySnapshot.forEach((doc) => {
-      const group = doc.data();
-      const option = document.createElement('option');
-      option.value = doc.id;
-      option.textContent = group.name;
-      groupSelect.appendChild(option);
-    });
-  } catch (error) {
-    console.error("Error loading groups:", error);
   }
 }
 
