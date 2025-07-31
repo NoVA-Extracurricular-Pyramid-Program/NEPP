@@ -88,21 +88,38 @@
       flex-wrap: wrap;
     }
 
-    .hero button {
-      background: var(--gold);
-      color: var(--dark-blue);
-      border: none;
-      padding: 1rem 2.5rem;
-      font-size: 1rem;
-      border-radius: 12px;
-      cursor: pointer;
-      transition: all 0.3s ease;
-    }
+   .hero-button {
+  background-color: #ffdd33; /* softer yellow */
+  color: #001f3f;
+  border: none;
+  padding: 0.9rem 2rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-decoration: none;
+  display: inline-block;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(255, 221, 51, 0.5), 0 2px 6px rgba(0, 0, 0, 0.1);
+  transform: scale(1);
+}
 
-    .hero button:hover {
-      background-color: #ffc300;
-      transform: translateY(-2px);
-    }
+.hero-button:hover {
+  background-color: #ffcc00;
+  box-shadow: 0 6px 18px rgba(255, 204, 0, 0.6), 0 3px 8px rgba(0, 0, 0, 0.2);
+  transform: scale(1.03);
+}
+
+.hero-button:active {
+  transform: scale(0.97);
+  box-shadow: 0 3px 10px rgba(255, 204, 0, 0.4);
+}
+
+
+
+
+
 
     .feature-list {
       display: grid;
@@ -186,12 +203,16 @@
       text-decoration: none;
     }
 
-    .site-header {
-  position: absolute;
-  top: 20px;
-  left: 30px;
-  z-index: 10;
+   .hero-logo {
+  width: 120px; /* adjust size as needed */
+  height: auto;
+  margin-bottom: 1rem;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.4));
 }
+
 
 .logo {
   height: 60px;
@@ -204,19 +225,21 @@
 </head>
 
 <body>
-<header class="site-header">
-  <img src="images/logo.png" alt="NEPP Logo" class="logo">
-</header>
+
 
   <section class="hero">
+    <img src="images/logo.png" alt="NEPP Logo" class="hero-logo">
     <h1>Welcome to NEPP</h1>
     <p>
       NEPP is your all-in-one platform to power your Science Olympiad, TSA, Model UN, and Debate teams — from organizing events and resources to collaborating with your teammates.
     </p>
-    <div class="hero-buttons">
-  <a href="login.html" class="hero-link-button">Login</a>
-  <a href="signup.html" class="hero-link-button">Sign Up</a>
+  <div class="hero-buttons">
+  <a href="login.html" class="hero-button">Login</a>
+  <a href="signup.html" class="hero-button">Sign Up</a>
 </div>
+
+
+
 
   </section>
 
@@ -245,9 +268,13 @@
     </div>
   </section>
 
+
+
+
   <section class="contact-form">
     <h2 style="text-align:center;">Contact Us</h2>
-    <form>
+    <form action="https://api.web3forms.com/submit" method="POST">
+        <input type="hidden" name="access_key" value="c3cf2ea8-deb4-4e2d-b5f1-ecf203e168ca">
       <label for="name">Name</label>
       <input type="text" id="name" name="name" required />
 
@@ -260,13 +287,14 @@
       <button type="submit">Send</button>
     </form>
   </section>
+
   <br> 
   <br> 
   <br> 
 
   <footer>
     <p>Contact us:
-      <a href="mailto:nepp.contact@example.com">Email</a> |
+      <a href="neppadvisors@gmail.com">Email</a> |
       <a href="https://instagram.com/nepp">Instagram</a>
     </p>
   </footer>
