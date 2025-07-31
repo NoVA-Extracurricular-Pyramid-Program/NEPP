@@ -89,12 +89,38 @@ class SidebarManager {
 
     updateSidebarUser(user = this.currentUser) {
         const userNameElement = document.getElementById('sidebar-user-name');
+        const userBadgeElement = document.getElementById('sidebar-user-badge');
+        
         if (userNameElement) {
             if (user) {
                 userNameElement.textContent = user.displayName || user.email || 'NEPP User';
             } else {
                 userNameElement.textContent = 'NEPP User';
             }
+        }
+        
+        if (userBadgeElement) {
+            this.updateProfilePicture(user, userBadgeElement);
+        }
+    }
+
+    updateProfilePicture(user, badgeElement) {
+        // Clear existing content
+        badgeElement.innerHTML = '';
+        
+        if (user && user.photoURL) {
+            // User has a profile picture
+            const img = document.createElement('img');
+            img.src = user.photoURL;
+            img.alt = 'User Profile Picture';
+            img.onerror = () => {
+                // If image fails to load, fallback to emoji
+                badgeElement.innerHTML = '🟡';
+            };
+            badgeElement.appendChild(img);
+        } else {
+            // No user or no profile picture, use emoji fallback
+            badgeElement.innerHTML = '🟡';
         }
     }
 

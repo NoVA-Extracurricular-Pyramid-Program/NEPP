@@ -111,6 +111,9 @@
   margin: 0 0 1.5rem 0;
   font-size: 1.8rem;
   font-weight: 600;
+  text-shadow:
+    0 0 2px #fff,
+    0 0 5px #ecd906;
 }
 
 .popup-actions {

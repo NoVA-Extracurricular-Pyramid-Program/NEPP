@@ -69,14 +69,24 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initializePage() {
-  if (isInitialized) return; // Prevent multiple initializations
+  if (isInitialized) {
+    console.log('Page already initialized, skipping...');
+    return; // Prevent multiple initializations
+  }
+  
+  console.log('=== INITIALIZING CREATE-FORM PAGE ===');
   
   initializeQuestionTypeButtons();
   initializeCancelButton();
   initializeFormSubmission();
-  initializeAudienceSelector();
+  
+  // Add a small delay to ensure DOM is fully ready
+  setTimeout(() => {
+    initializeAudienceSelector();
+  }, 100);
   
   isInitialized = true;
+  console.log('=== PAGE INITIALIZATION COMPLETE ===');
 }
 
 function initializeQuestionTypeButtons() {
@@ -118,25 +128,32 @@ let allGroups = [];
 let allUsers = [];
 
 function initializeAudienceSelector() {
-  console.log('Initializing audience selector...');
+  console.log('=== AUDIENCE SELECTOR INITIALIZATION START ===');
+  console.log('DOM ready state:', document.readyState);
   
   // Check if audience selector exists
   const audienceSelector = document.querySelector('.audience-selector');
+  console.log('audienceSelector element:', audienceSelector);
+  
   if (!audienceSelector) {
     console.error('Audience selector not found in DOM');
+    // Let's check what form elements we do have
+    console.log('Available form elements:', document.querySelectorAll('form, .form-group, .audience-selector'));
     return;
   }
   
   // Initialize audience tab switching
   const audienceTabs = document.querySelectorAll('.audience-tab');
-  console.log('Found audience tabs:', audienceTabs.length);
+  console.log('Found audience tabs:', audienceTabs.length, audienceTabs);
   
   if (audienceTabs.length === 0) {
     console.error('No audience tabs found');
+    console.log('Available buttons:', document.querySelectorAll('button'));
     return;
   }
   
-  audienceTabs.forEach(tab => {
+  audienceTabs.forEach((tab, index) => {
+    console.log(`Setting up tab ${index}:`, tab);
     tab.addEventListener('click', (e) => {
       e.preventDefault();
       const target = tab.getAttribute('data-target');
@@ -149,13 +166,50 @@ function initializeAudienceSelector() {
   setupGroupSearch();
   setupUserSearch();
   
-  // Load data
-  loadGroupsAndUsers();
+  // Load data - add better error handling
+  loadGroupsAndUsers().catch(error => {
+    console.error('Failed to load groups and users:', error);
+  });
   
-  console.log('Audience selector initialized successfully');
+  // Add click outside functionality to hide search results
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.audience-selector')) {
+      // Hide all search results
+      document.querySelectorAll('.group-results, .user-results').forEach(container => {
+        container.classList.remove('show');
+      });
+    }
+  });
+  
+  console.log('=== AUDIENCE SELECTOR INITIALIZATION COMPLETE ===');
 }
 
+// Test function to check if elements exist
+window.testAudienceSelector = function() {
+  console.log('=== TESTING AUDIENCE SELECTOR ===');
+  console.log('audience-selector:', document.querySelector('.audience-selector'));
+  console.log('audience-tabs:', document.querySelectorAll('.audience-tab'));
+  console.log('selectedGroups:', document.getElementById('selectedGroups'));
+  console.log('groupSearch:', document.getElementById('groupSearch'));
+  console.log('Current user:', auth.currentUser);
+  console.log('allGroups:', allGroups);
+  console.log('allUsers:', allUsers);
+  
+  // Try to trigger search manually
+  if (allGroups.length === 0 && allUsers.length === 0) {
+    console.log('No groups/users loaded, trying to load...');
+    loadGroupsAndUsers();
+  } else {
+    console.log('Data is loaded, showing results...');
+    showInitialResults();
+  }
+  
+  alert('Check console for audience selector status. Results should now be visible!');
+};
+
 function switchAudienceTab(tabName) {
+  console.log('Switching to tab:', tabName);
+  
   // Update tab buttons
   document.querySelectorAll('.audience-tab').forEach(tab => {
     tab.classList.remove('active');
@@ -170,6 +224,20 @@ function switchAudienceTab(tabName) {
 
   // Clear searches when switching tabs
   clearSearches();
+  
+  // Show results for the new tab if data is loaded
+  if (allGroups.length > 0 || allUsers.length > 0) {
+    setTimeout(() => {
+      if (tabName === 'groups') {
+        displayGroupResults(allGroups, 'groups');
+      } else if (tabName === 'individuals') {
+        displayUserResults(allUsers, 'users');
+      } else if (tabName === 'both') {
+        displayGroupResults(allGroups, 'both');
+        displayUserResults(allUsers, 'both');
+      }
+    }, 100);
+  }
 }
 
 function setupGroupSearch() {
@@ -184,11 +252,35 @@ function setupGroupSearch() {
     groupSearch.addEventListener('input', (e) => {
       searchGroups(e.target.value, 'groups');
     });
+    groupSearch.addEventListener('focus', () => {
+      // Show all groups when focusing
+      if (allGroups.length > 0) {
+        searchGroups(groupSearch.value || '', 'groups');
+      }
+    });
+    groupSearch.addEventListener('click', () => {
+      // Show all groups when clicking
+      if (allGroups.length > 0) {
+        searchGroups(groupSearch.value || '', 'groups');
+      }
+    });
   }
   
   if (groupSearchBoth) {
     groupSearchBoth.addEventListener('input', (e) => {
       searchGroups(e.target.value, 'both');
+    });
+    groupSearchBoth.addEventListener('focus', () => {
+      // Show all groups when focusing
+      if (allGroups.length > 0) {
+        searchGroups(groupSearchBoth.value || '', 'both');
+      }
+    });
+    groupSearchBoth.addEventListener('click', () => {
+      // Show all groups when clicking
+      if (allGroups.length > 0) {
+        searchGroups(groupSearchBoth.value || '', 'both');
+      }
     });
   }
 }
@@ -205,11 +297,35 @@ function setupUserSearch() {
     userSearch.addEventListener('input', (e) => {
       searchUsers(e.target.value, 'users');
     });
+    userSearch.addEventListener('focus', () => {
+      // Show all users when focusing
+      if (allUsers.length > 0) {
+        searchUsers(userSearch.value || '', 'users');
+      }
+    });
+    userSearch.addEventListener('click', () => {
+      // Show all users when clicking
+      if (allUsers.length > 0) {
+        searchUsers(userSearch.value || '', 'users');
+      }
+    });
   }
   
   if (userSearchBoth) {
     userSearchBoth.addEventListener('input', (e) => {
       searchUsers(e.target.value, 'both');
+    });
+    userSearchBoth.addEventListener('focus', () => {
+      // Show all users when focusing
+      if (allUsers.length > 0) {
+        searchUsers(userSearchBoth.value || '', 'both');
+      }
+    });
+    userSearchBoth.addEventListener('click', () => {
+      // Show all users when clicking
+      if (allUsers.length > 0) {
+        searchUsers(userSearchBoth.value || '', 'both');
+      }
     });
   }
 }
@@ -255,26 +371,91 @@ async function loadGroupsAndUsers() {
     });
 
     console.log(`Loaded ${allUsers.length} users (excluding current user)`);
+    
+    // After loading data, show initial state for the currently active tab
+    showInitialResults();
+    
   } catch (error) {
     console.error('Error loading groups and users:', error);
   }
 }
 
-function searchGroups(query, mode = 'groups') {
-  const filteredGroups = allGroups.filter(group => 
-    group.name?.toLowerCase().includes(query.toLowerCase()) ||
-    group.description?.toLowerCase().includes(query.toLowerCase())
-  );
+function showInitialResults() {
+  // Get the currently active tab
+  const activeTab = document.querySelector('.audience-tab.active');
+  if (!activeTab) return;
   
+  const target = activeTab.getAttribute('data-target');
+  console.log('Showing initial results for tab:', target);
+  
+  // Show results based on active tab
+  if (target === 'groups') {
+    displayGroupResults(allGroups, 'groups');
+  } else if (target === 'individuals') {
+    displayUserResults(allUsers, 'users');
+  } else if (target === 'both') {
+    displayGroupResults(allGroups, 'both');
+    displayUserResults(allUsers, 'both');
+  }
+  
+  // Also populate the search fields to show there are options available
+  setTimeout(() => {
+    showEmptySearchResults();
+  }, 200);
+}
+
+function showEmptySearchResults() {
+  // Show empty search results for the current active tab to indicate search is working
+  const activeTab = document.querySelector('.audience-tab.active');
+  if (!activeTab) return;
+  
+  const target = activeTab.getAttribute('data-target');
+  
+  if (target === 'groups') {
+    searchGroups('', 'groups');
+  } else if (target === 'individuals') {
+    searchUsers('', 'users');
+  } else if (target === 'both') {
+    searchGroups('', 'both');
+    searchUsers('', 'both');
+  }
+}
+
+function searchGroups(query, mode = 'groups') {
+  console.log(`Searching groups with query: "${query}", mode: ${mode}`);
+  console.log(`Available groups:`, allGroups);
+  
+  let filteredGroups;
+  if (!query || query.trim() === '') {
+    // Show all groups if query is empty
+    filteredGroups = allGroups;
+  } else {
+    filteredGroups = allGroups.filter(group => 
+      group.name?.toLowerCase().includes(query.toLowerCase()) ||
+      group.description?.toLowerCase().includes(query.toLowerCase())
+    );
+  }
+  
+  console.log(`Filtered groups:`, filteredGroups);
   displayGroupResults(filteredGroups, mode);
 }
 
 function searchUsers(query, mode = 'users') {
-  const filteredUsers = allUsers.filter(user => 
-    user.displayName?.toLowerCase().includes(query.toLowerCase()) ||
-    user.email?.toLowerCase().includes(query.toLowerCase())
-  );
+  console.log(`Searching users with query: "${query}", mode: ${mode}`);
+  console.log(`Available users:`, allUsers);
   
+  let filteredUsers;
+  if (!query || query.trim() === '') {
+    // Show all users if query is empty
+    filteredUsers = allUsers;
+  } else {
+    filteredUsers = allUsers.filter(user => 
+      user.displayName?.toLowerCase().includes(query.toLowerCase()) ||
+      user.email?.toLowerCase().includes(query.toLowerCase())
+    );
+  }
+  
+  console.log(`Filtered users:`, filteredUsers);
   displayUserResults(filteredUsers, mode);
 }
 
@@ -283,10 +464,13 @@ function displayGroupResults(groups, mode = 'groups') {
     document.getElementById('groupResultsBoth') : 
     document.getElementById('groupResults');
   
-  if (!resultsContainer) return;
+  if (!resultsContainer) {
+    console.error(`Group results container not found for mode: ${mode}`);
+    return;
+  }
 
   if (groups.length === 0) {
-    resultsContainer.innerHTML = '<div class="no-results">No groups found</div>';
+    resultsContainer.innerHTML = '<div class="no-results">No groups found. Create a group first to assign forms to groups.</div>';
   } else {
     resultsContainer.innerHTML = groups.map(group => `
       <div class="group-result" onclick="selectGroup('${group.id}', '${mode}')">
@@ -297,6 +481,7 @@ function displayGroupResults(groups, mode = 'groups') {
   }
   
   resultsContainer.classList.add('show');
+  console.log(`Displayed ${groups.length} groups for mode: ${mode}`);
 }
 
 function displayUserResults(users, mode = 'users') {
@@ -304,10 +489,13 @@ function displayUserResults(users, mode = 'users') {
     document.getElementById('userResultsBoth') : 
     document.getElementById('userResults');
   
-  if (!resultsContainer) return;
+  if (!resultsContainer) {
+    console.error(`User results container not found for mode: ${mode}`);
+    return;
+  }
 
   if (users.length === 0) {
-    resultsContainer.innerHTML = '<div class="no-results">No users found</div>';
+    resultsContainer.innerHTML = '<div class="no-results">No users found. Users must sign up to receive forms.</div>';
   } else {
     resultsContainer.innerHTML = users.map(user => `
       <div class="user-result" onclick="selectUser('${user.id}', '${mode}')">
@@ -318,6 +506,7 @@ function displayUserResults(users, mode = 'users') {
   }
   
   resultsContainer.classList.add('show');
+  console.log(`Displayed ${users.length} users for mode: ${mode}`);
 }
 
 window.selectGroup = function(groupId, mode = 'groups') {
@@ -704,7 +893,9 @@ async function handleFormSubmit(e) {
     const formId = docRef.id;
     
     // Send notifications to all target recipients
-    await sendFormNotifications(formId, formTitle, selectedGroups, selectedUsers);
+    if (NotificationService) {
+      await sendFormNotifications(formId, formTitle, user.uid, user.displayName || user.email || 'Anonymous');
+    }
     
     window.location.href = 'forms.html';
   } catch (error) {

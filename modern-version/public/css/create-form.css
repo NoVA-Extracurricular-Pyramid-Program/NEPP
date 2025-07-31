@@ -1008,6 +1008,13 @@ input[type="checkbox"] {
   color: #8892b0;
 }
 
+.no-results {
+  padding: 1rem;
+  text-align: center;
+  color: #8892b0;
+  font-style: italic;
+}
+
 /* Both mode specific styles */
 #both-selection input {
   margin-bottom: 0.5rem;
