@@ -9,7 +9,8 @@ import {
     where, 
     orderBy,
     updateDoc,
-    serverTimestamp 
+    serverTimestamp,
+    writeBatch
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 import { 
     ref, 
@@ -23,10 +24,269 @@ import { db, storage } from '/config/firebase-config.js';
 class ResourcesService {
     constructor() {
         this.collectionName = 'resources';
+        this.foldersCollectionName = 'folders';
     }
 
-    // Upload file to Firebase Storage and save metadata to Firestore
-    async uploadFile(file, userId, onProgress = null) {
+    // Create a new folder
+    async createFolder(name, parentFolderId, userId) {
+        try {
+            const folderData = {
+                name: name.trim(),
+                parentFolderId: parentFolderId || null,
+                userId,
+                type: 'folder',
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+                // Sharing data
+                shareType: 'private',
+                shareDescription: '',
+                groupId: null,
+                sharedWith: [],
+                isShared: false
+            };
+
+            const docRef = await addDoc(collection(db, this.foldersCollectionName), folderData);
+            
+            return {
+                id: docRef.id,
+                ...folderData,
+                createdAt: new Date(),
+                updatedAt: new Date()
+            };
+        } catch (error) {
+            console.error('Error creating folder:', error);
+            throw error;
+        }
+    }
+
+    // Get folders for a user with optional parent filter
+    async getFolders(userId, parentFolderId = null, userGroups = []) {
+        try {
+            const queries = [];
+            
+            // User's own folders
+            queries.push(
+                query(
+                    collection(db, this.foldersCollectionName),
+                    where('userId', '==', userId),
+                    where('parentFolderId', '==', parentFolderId),
+                    orderBy('name', 'asc')
+                )
+            );
+            
+            // Folders shared with user's groups
+            if (userGroups.length > 0) {
+                for (const groupId of userGroups) {
+                    queries.push(
+                        query(
+                            collection(db, this.foldersCollectionName),
+                            where('groupId', '==', groupId),
+                            where('shareType', '==', 'group'),
+                            where('parentFolderId', '==', parentFolderId),
+                            orderBy('name', 'asc')
+                        )
+                    );
+                }
+            }
+
+            // Execute all queries
+            const queryPromises = queries.map(q => getDocs(q));
+            const querySnapshots = await Promise.all(queryPromises);
+            
+            // Combine results and remove duplicates
+            const foldersMap = new Map();
+            
+            querySnapshots.forEach(querySnapshot => {
+                querySnapshot.forEach(doc => {
+                    const data = doc.data();
+                    foldersMap.set(doc.id, {
+                        id: doc.id,
+                        ...data,
+                        createdAt: data.createdAt?.toDate() || new Date(),
+                        updatedAt: data.updatedAt?.toDate() || new Date()
+                    });
+                });
+            });
+            
+            return Array.from(foldersMap.values());
+        } catch (error) {
+            console.error('Error fetching folders:', error);
+            throw error;
+        }
+    }
+
+    // Get folder path for breadcrumb navigation
+    async getFolderPath(folderId) {
+        try {
+            const path = [];
+            let currentFolderId = folderId;
+
+            while (currentFolderId) {
+                const folderDoc = await getDoc(doc(db, this.foldersCollectionName, currentFolderId));
+                if (folderDoc.exists()) {
+                    const folderData = folderDoc.data();
+                    path.unshift({
+                        id: currentFolderId,
+                        name: folderData.name
+                    });
+                    currentFolderId = folderData.parentFolderId;
+                } else {
+                    break;
+                }
+            }
+
+            return path;
+        } catch (error) {
+            console.error('Error getting folder path:', error);
+            return [];
+        }
+    }
+
+    // Move file to a folder
+    async moveFile(fileId, targetFolderId) {
+        try {
+            const fileRef = doc(db, this.collectionName, fileId);
+            await updateDoc(fileRef, {
+                folderId: targetFolderId,
+                updatedAt: serverTimestamp()
+            });
+            return true;
+        } catch (error) {
+            console.error('Error moving file:', error);
+            throw error;
+        }
+    }
+
+    // Move folder to another folder
+    async moveFolder(folderId, targetParentFolderId) {
+        try {
+            // Check for circular dependency
+            if (await this.wouldCreateCircularDependency(folderId, targetParentFolderId)) {
+                throw new Error('Cannot move folder: would create circular dependency');
+            }
+
+            const folderRef = doc(db, this.foldersCollectionName, folderId);
+            await updateDoc(folderRef, {
+                parentFolderId: targetParentFolderId,
+                updatedAt: serverTimestamp()
+            });
+            return true;
+        } catch (error) {
+            console.error('Error moving folder:', error);
+            throw error;
+        }
+    }
+
+    // Check for circular dependency when moving folders
+    async wouldCreateCircularDependency(sourceFolderId, targetParentFolderId) {
+        if (!targetParentFolderId) return false;
+        
+        let currentFolderId = targetParentFolderId;
+        while (currentFolderId) {
+            if (currentFolderId === sourceFolderId) {
+                return true;
+            }
+            
+            const folderDoc = await getDoc(doc(db, this.foldersCollectionName, currentFolderId));
+            if (folderDoc.exists()) {
+                currentFolderId = folderDoc.data().parentFolderId;
+            } else {
+                break;
+            }
+        }
+        
+        return false;
+    }
+
+    // Rename file or folder
+    async renameItem(itemId, newName, isFolder = false) {
+        try {
+            const collectionName = isFolder ? this.foldersCollectionName : this.collectionName;
+            const itemRef = doc(db, collectionName, itemId);
+            
+            await updateDoc(itemRef, {
+                name: newName.trim(),
+                updatedAt: serverTimestamp()
+            });
+            
+            return true;
+        } catch (error) {
+            console.error('Error renaming item:', error);
+            throw error;
+        }
+    }
+
+    // Delete folder and all its contents
+    async deleteFolder(folderId, userId) {
+        try {
+            const batch = writeBatch(db);
+            
+            // Get folder to verify ownership
+            const folderDoc = await getDoc(doc(db, this.foldersCollectionName, folderId));
+            if (!folderDoc.exists()) {
+                throw new Error('Folder not found');
+            }
+            
+            const folderData = folderDoc.data();
+            if (folderData.userId !== userId) {
+                throw new Error('You can only delete folders you own');
+            }
+
+            // Recursively delete all subfolders and files
+            await this.deleteRecursively(folderId, batch, userId);
+            
+            // Delete the folder itself
+            batch.delete(doc(db, this.foldersCollectionName, folderId));
+            
+            await batch.commit();
+            return true;
+        } catch (error) {
+            console.error('Error deleting folder:', error);
+            throw error;
+        }
+    }
+
+    // Recursively delete folder contents
+    async deleteRecursively(folderId, batch, userId) {
+        // Delete all files in this folder
+        const filesQuery = query(
+            collection(db, this.collectionName),
+            where('folderId', '==', folderId),
+            where('userId', '==', userId)
+        );
+        const filesSnapshot = await getDocs(filesQuery);
+        
+        for (const fileDoc of filesSnapshot.docs) {
+            const fileData = fileDoc.data();
+            // Delete from storage
+            if (fileData.storagePath) {
+                try {
+                    const storageRef = ref(storage, fileData.storagePath);
+                    await deleteObject(storageRef);
+                } catch (storageError) {
+                    console.warn('Failed to delete file from storage:', fileData.storagePath, storageError);
+                }
+            }
+            // Delete from Firestore
+            batch.delete(fileDoc.ref);
+        }
+        
+        // Delete all subfolders
+        const subfoldersQuery = query(
+            collection(db, this.foldersCollectionName),
+            where('parentFolderId', '==', folderId),
+            where('userId', '==', userId)
+        );
+        const subfoldersSnapshot = await getDocs(subfoldersQuery);
+        
+        for (const subfolderDoc of subfoldersSnapshot.docs) {
+            await this.deleteRecursively(subfolderDoc.id, batch, userId);
+            batch.delete(subfolderDoc.ref);
+        }
+    }
+
+    // Upload file to Firebase Storage and save metadata to Firestore with folder support
+    async uploadFile(file, userId, folderId = null, onProgress = null) {
         try {
             // Create unique filename with timestamp
             const timestamp = Date.now();
@@ -73,7 +333,9 @@ class ResourcesService {
                 downloadURL,
                 storagePath: filePath,
                 userId,
+                folderId: folderId || null,
                 uploadedAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
                 lastModified: new Date(file.lastModified)
             };
 
@@ -82,7 +344,8 @@ class ResourcesService {
             return {
                 id: docRef.id,
                 ...fileData,
-                uploadedAt: new Date() // For immediate display
+                uploadedAt: new Date(),
+                updatedAt: new Date()
             };
         } catch (error) {
             console.error('Error uploading file:', error);
@@ -90,30 +353,200 @@ class ResourcesService {
         }
     }
 
-    // Get all files for a user
-    async getUserFiles(userId) {
+    // Get all files for a user in a specific folder (including shared files)
+    async getUserFilesInFolder(userId, folderId = null, userGroups = []) {
         try {
-            const q = query(
-                collection(db, this.collectionName),
-                where('userId', '==', userId),
-                orderBy('uploadedAt', 'desc')
+            const queries = [];
+            
+            // User's own files
+            queries.push(
+                query(
+                    collection(db, this.collectionName),
+                    where('userId', '==', userId),
+                    where('folderId', '==', folderId),
+                    orderBy('uploadedAt', 'desc')
+                )
             );
             
-            const querySnapshot = await getDocs(q);
-            const files = [];
+            // Files shared with user's groups
+            if (userGroups.length > 0) {
+                for (const groupId of userGroups) {
+                    queries.push(
+                        query(
+                            collection(db, this.collectionName),
+                            where('groupId', '==', groupId),
+                            where('shareType', '==', 'group'),
+                            where('folderId', '==', folderId),
+                            orderBy('uploadedAt', 'desc')
+                        )
+                    );
+                }
+            }
+
+            // Execute all queries
+            const queryPromises = queries.map(q => getDocs(q));
+            const querySnapshots = await Promise.all(queryPromises);
             
-            querySnapshot.forEach(doc => {
-                const data = doc.data();
-                files.push({
-                    id: doc.id,
-                    ...data,
-                    uploadedAt: data.uploadedAt?.toDate() || new Date()
+            // Combine results and remove duplicates
+            const filesMap = new Map();
+            
+            querySnapshots.forEach(querySnapshot => {
+                querySnapshot.forEach(doc => {
+                    const data = doc.data();
+                    filesMap.set(doc.id, {
+                        id: doc.id,
+                        ...data,
+                        uploadedAt: data.uploadedAt?.toDate() || new Date(),
+                        updatedAt: data.updatedAt?.toDate() || new Date(),
+                        lastModified: data.lastModified?.toDate() || new Date()
+                    });
                 });
             });
             
-            return files;
+            // Convert to array and sort by date
+            const files = Array.from(filesMap.values());
+            return files.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
         } catch (error) {
-            console.error('Error fetching user files:', error);
+            console.error('Error fetching user files in folder:', error);
+            throw error;
+        }
+    }
+
+    // Get all files for a user (including shared files) - updated for legacy compatibility
+    async getUserFilesWithShared(userId, userGroups = []) {
+        return this.getUserFilesInFolder(userId, null, userGroups);
+    }
+
+    // Get folder contents (both folders and files)
+    async getFolderContents(userId, folderId = null, userGroups = []) {
+        try {
+            const [folders, files] = await Promise.all([
+                this.getFolders(userId, folderId, userGroups),
+                this.getUserFilesInFolder(userId, folderId, userGroups)
+            ]);
+
+            return {
+                folders: folders || [],
+                files: files || []
+            };
+        } catch (error) {
+            console.error('Error fetching folder contents:', error);
+            throw error;
+        }
+    }
+
+    // Share folder
+    async shareFolder(folderId, shareData, userId) {
+        try {
+            console.log('Sharing folder:', { folderId, shareData, userId });
+            
+            const folderDocRef = doc(db, this.foldersCollectionName, folderId);
+            const folderDoc = await getDoc(folderDocRef);
+            
+            if (!folderDoc.exists()) {
+                throw new Error('Folder not found');
+            }
+
+            const folderData = folderDoc.data();
+            
+            // Check if user owns the folder
+            if (folderData.userId !== userId) {
+                throw new Error('You can only share folders you own');
+            }
+
+            // Update the folder with sharing information
+            const updateData = {
+                shareType: shareData.type,
+                shareDescription: shareData.description || '',
+                groupId: shareData.groupId || null,
+                sharedWith: shareData.sharedWith || [],
+                isShared: shareData.type !== 'private',
+                lastShared: serverTimestamp()
+            };
+
+            await updateDoc(folderDocRef, updateData);
+            
+            // Send notifications for folder sharing
+            try {
+                await this.sendFolderShareNotifications(folderId, folderData.name, shareData, userId);
+            } catch (notificationError) {
+                console.warn('Error sending folder share notifications:', notificationError);
+            }
+            
+            return { success: true };
+        } catch (error) {
+            console.error('Error sharing folder:', error);
+            throw error;
+        }
+    }
+
+    // Send notifications for folder sharing
+    async sendFolderShareNotifications(folderId, folderName, shareData, sharerUserId) {
+        try {
+            const NotificationService = (await import('/services/notification-service.js')).default;
+            
+            // Get sharer's display name
+            const userRef = doc(db, 'users', sharerUserId);
+            const userDoc = await getDoc(userRef);
+            const sharerName = userDoc.exists() ? 
+                (userDoc.data().displayName || userDoc.data().email?.split('@')[0] || 'Someone') : 
+                'Someone';
+
+            const notifications = [];
+            const recipientIds = new Set();
+
+            // Notify directly shared users
+            if (shareData.sharedWith && shareData.sharedWith.length > 0) {
+                for (const userId of shareData.sharedWith) {
+                    if (userId !== sharerUserId && !recipientIds.has(userId)) {
+                        recipientIds.add(userId);
+                        notifications.push(
+                            NotificationService.createResourceSharedNotification(
+                                folderId,
+                                `📁 ${folderName}`,
+                                sharerUserId,
+                                sharerName,
+                                userId
+                            )
+                        );
+                    }
+                }
+            }
+
+            // Notify group members if shared with a group
+            if (shareData.groupId && shareData.type === 'group') {
+                try {
+                    const GroupsService = (await import('/services/groups-service.js')).default;
+                    const group = await GroupsService.getGroupDetails(shareData.groupId);
+                    if (group && group.members) {
+                        for (const memberId of group.members) {
+                            if (memberId !== sharerUserId && !recipientIds.has(memberId)) {
+                                recipientIds.add(memberId);
+                                notifications.push(
+                                    NotificationService.createResourceSharedNotification(
+                                        folderId,
+                                        `📁 ${folderName}`,
+                                        sharerUserId,
+                                        sharerName,
+                                        memberId
+                                    )
+                                );
+                            }
+                        }
+                    }
+                } catch (groupError) {
+                    console.warn(`Could not load group ${shareData.groupId} for notifications:`, groupError);
+                }
+            }
+
+            // Send all notifications
+            if (notifications.length > 0) {
+                await Promise.allSettled(notifications);
+                console.log(`Sent ${notifications.length} folder share notifications for folder: ${folderName}`);
+            }
+
+        } catch (error) {
+            console.error('Error sending folder share notifications:', error);
             throw error;
         }
     }
@@ -136,7 +569,7 @@ class ResourcesService {
     }
 
     // Upload file with sharing options
-    async uploadFileWithSharing(file, userId, shareData, onProgress = null) {
+    async uploadFileWithSharing(file, userId, shareData, folderId = null, onProgress = null) {
         try {
             // Create unique filename with timestamp
             const timestamp = Date.now();
@@ -183,7 +616,9 @@ class ResourcesService {
                 downloadURL,
                 storagePath: filePath,
                 userId,
+                folderId: folderId || null,
                 uploadedAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
                 lastModified: new Date(file.lastModified),
                 // Sharing data
                 shareType: shareData.type,
@@ -198,66 +633,11 @@ class ResourcesService {
             return {
                 id: docRef.id,
                 ...fileData,
-                uploadedAt: new Date() // For immediate display
+                uploadedAt: new Date(),
+                updatedAt: new Date()
             };
         } catch (error) {
             console.error('Error uploading file with sharing:', error);
-            throw error;
-        }
-    }
-
-    // Get all files for a user (including shared files)
-    async getUserFilesWithShared(userId, userGroups = []) {
-        try {
-            const queries = [];
-            
-            // User's own files
-            queries.push(
-                query(
-                    collection(db, this.collectionName),
-                    where('userId', '==', userId),
-                    orderBy('uploadedAt', 'desc')
-                )
-            );
-            
-            // Files shared with user's groups
-            if (userGroups.length > 0) {
-                for (const groupId of userGroups) {
-                    queries.push(
-                        query(
-                            collection(db, this.collectionName),
-                            where('groupId', '==', groupId),
-                            where('shareType', '==', 'group'),
-                            orderBy('uploadedAt', 'desc')
-                        )
-                    );
-                }
-            }
-
-            // Execute all queries
-            const queryPromises = queries.map(q => getDocs(q));
-            const querySnapshots = await Promise.all(queryPromises);
-            
-            // Combine results and remove duplicates
-            const filesMap = new Map();
-            
-            querySnapshots.forEach(querySnapshot => {
-                querySnapshot.forEach(doc => {
-                    const data = doc.data();
-                    filesMap.set(doc.id, {
-                        id: doc.id,
-                        ...data,
-                        uploadedAt: data.uploadedAt?.toDate() || new Date(),
-                        lastModified: data.lastModified?.toDate() || new Date()
-                    });
-                });
-            });
-            
-            // Convert to array and sort by date
-            const files = Array.from(filesMap.values());
-            return files.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
-        } catch (error) {
-            console.error('Error fetching user files with shared:', error);
             throw error;
         }
     }
