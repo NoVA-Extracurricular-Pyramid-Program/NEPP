@@ -161,6 +161,45 @@ service cloud.firestore {
       allow delete: if isValidEmail() && 
         request.auth.uid == resource.data.userId;
     }
+
+    // Folders - comprehensive folder management permissions
+    match /folders/{folderId} {
+      // Allow reading for:
+      // 1. Folder owner
+      // 2. Users the folder is shared with specifically
+      // 3. Group members if shared with a group
+      allow read: if isValidEmail() && (
+        // Folder owner can always read
+        request.auth.uid == resource.data.userId ||
+        // Folder is shared with specific users and current user is in the list
+        (resource.data.shareType == 'specific' && 
+         request.auth.uid in resource.data.sharedWith) ||
+        // Folder is shared with a group (we'll check group membership in client for performance)
+        (resource.data.shareType == 'group' && resource.data.groupId != null)
+      );
+      
+      // Allow creating folders
+      allow create: if isValidEmail() && 
+        request.auth.uid == request.resource.data.userId &&
+        // Ensure required fields are present
+        request.resource.data.keys().hasAll(['name', 'userId', 'type', 'createdAt']) &&
+        request.resource.data.type == 'folder' &&
+        // Name validation
+        request.resource.data.name is string &&
+        request.resource.data.name.size() > 0 &&
+        request.resource.data.name.size() <= 100;
+      
+      // Allow updates only for folder owner
+      allow update: if isValidEmail() && 
+        request.auth.uid == resource.data.userId &&
+        // Prevent changing ownership or type
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.type == resource.data.type;
+      
+      // Allow deletion only for folder owner
+      allow delete: if isValidEmail() && 
+        request.auth.uid == resource.data.userId;
+    }
     
     // Feedback collection - users can create feedback, only you can read all
     match /feedback/{feedbackId} {

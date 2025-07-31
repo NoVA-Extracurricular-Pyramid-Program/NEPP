@@ -10,9 +10,15 @@ class ResourcesManager {
     constructor() {
         this.currentUser = null;
         this.files = [];
+        this.folders = [];
         this.filteredFiles = [];
+        this.filteredFolders = [];
         this.uploadQueue = [];
         this.isUploading = false;
+        this.currentFolderId = null;
+        this.folderPath = [];
+        this.draggedItem = null;
+        this.contextItem = null;
         
         this.initializeElements();
         this.bindEvents();
@@ -24,14 +30,35 @@ class ResourcesManager {
         this.searchInput = document.getElementById('searchInput');
         this.fileFilter = document.getElementById('fileFilter');
         this.uploadBtn = document.getElementById('uploadBtn');
+        this.createFolderBtn = document.getElementById('createFolderBtn');
         this.fileInput = document.getElementById('fileInput');
         this.dropZone = document.getElementById('dropZone');
         this.filesList = document.getElementById('filesList');
+        this.breadcrumbList = document.getElementById('breadcrumbList');
+        this.rootFolderBtn = document.getElementById('rootFolder');
         
         // Modal elements
         this.uploadModal = document.getElementById('uploadModal');
         this.uploadProgress = document.getElementById('uploadProgress');
         this.cancelUploadBtn = document.getElementById('cancelUpload');
+        
+        this.createFolderModal = document.getElementById('createFolderModal');
+        this.folderNameInput = document.getElementById('folderName');
+        this.cancelCreateFolderBtn = document.getElementById('cancelCreateFolder');
+        this.confirmCreateFolderBtn = document.getElementById('confirmCreateFolder');
+        
+        this.renameModal = document.getElementById('renameModal');
+        this.renameModalTitle = document.getElementById('renameModalTitle');
+        this.newItemNameInput = document.getElementById('newItemName');
+        this.cancelRenameBtn = document.getElementById('cancelRename');
+        this.confirmRenameBtn = document.getElementById('confirmRename');
+        
+        this.moveModal = document.getElementById('moveModal');
+        this.moveModalTitle = document.getElementById('moveModalTitle');
+        this.folderTree = document.getElementById('folderTree');
+        this.cancelMoveBtn = document.getElementById('cancelMove');
+        this.confirmMoveBtn = document.getElementById('confirmMove');
+        
         this.shareModal = document.getElementById('shareModal');
         this.shareType = document.getElementById('shareType');
         this.groupSelection = document.getElementById('groupSelection');
@@ -41,27 +68,23 @@ class ResourcesManager {
         this.shareDescription = document.getElementById('shareDescription');
         this.cancelShareBtn = document.getElementById('cancelShare');
         this.confirmShareBtn = document.getElementById('confirmShare');
+        
         this.previewModal = document.getElementById('previewModal');
         this.previewContainer = document.getElementById('previewContainer');
         this.closePreviewBtn = document.getElementById('closePreview');
-
-        // Debug: Check if elements exist
-        if (!this.dropZone) {
-            console.error('Drop zone element not found');
-        }
-        if (!this.uploadBtn) {
-            console.error('Upload button not found');
-        }
-        if (!this.fileInput) {
-            console.error('File input not found');
-        }
+        
+        this.contextMenu = document.getElementById('contextMenu');
+        this.contextRename = document.getElementById('contextRename');
+        this.contextMove = document.getElementById('contextMove');
+        this.contextShare = document.getElementById('contextShare');
+        this.contextDelete = document.getElementById('contextDelete');
     }
 
     bindEvents() {
         // Search functionality
         if (this.searchInput) {
             this.searchInput.addEventListener('input', (e) => {
-                this.filterFiles(e.target.value);
+                this.filterItems(e.target.value);
             });
         }
 
@@ -79,6 +102,13 @@ class ResourcesManager {
             });
         }
 
+        // Create folder button
+        if (this.createFolderBtn) {
+            this.createFolderBtn.addEventListener('click', () => {
+                this.showCreateFolderModal();
+            });
+        }
+
         // File input
         if (this.fileInput) {
             this.fileInput.addEventListener('change', (e) => {
@@ -86,76 +116,207 @@ class ResourcesManager {
             });
         }
 
-        // Drag and drop
-        if (this.dropZone) {
-            this.dropZone.addEventListener('click', () => {
-                this.fileInput.click();
-            });
-
-            this.dropZone.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                this.dropZone.classList.add('drag-over');
-            });
-
-            this.dropZone.addEventListener('dragleave', (e) => {
-                e.preventDefault();
-                this.dropZone.classList.remove('drag-over');
-            });
-
-            this.dropZone.addEventListener('drop', (e) => {
-                e.preventDefault();
-                this.dropZone.classList.remove('drag-over');
-                const files = Array.from(e.dataTransfer.files);
-                this.handleFileSelection(files);
+        // Root folder navigation
+        if (this.rootFolderBtn) {
+            this.rootFolderBtn.addEventListener('click', () => {
+                this.navigateToFolder(null);
             });
         }
 
+        // Drag and drop
+        this.setupDragAndDrop();
+
         // Modal events
-        this.cancelUploadBtn.addEventListener('click', () => {
-            this.cancelUpload();
+        this.setupModalEvents();
+
+        // Context menu events
+        this.setupContextMenu();
+
+        // Global click to hide context menu
+        document.addEventListener('click', () => {
+            this.hideContextMenu();
         });
 
-        this.closePreviewBtn.addEventListener('click', () => {
-            this.closePreview();
-        });
-
-        // Share modal events
-        this.shareType.addEventListener('change', () => {
-            this.updateShareOptions();
-        });
-
-        this.cancelShareBtn.addEventListener('click', () => {
-            this.hideShareModal();
-        });
-
-        this.confirmShareBtn.addEventListener('click', () => {
-            this.handleShareConfirm();
-        });
-
-        // Close modals when clicking outside
-        this.uploadModal.addEventListener('click', (e) => {
-            if (e.target === this.uploadModal) {
-                this.cancelUpload();
-            }
-        });
-
-        this.previewModal.addEventListener('click', (e) => {
-            if (e.target === this.previewModal) {
-                this.closePreview();
+        // Prevent context menu on right click in specific areas
+        document.addEventListener('contextmenu', (e) => {
+            if (e.target.closest('.files-list')) {
+                e.preventDefault();
             }
         });
     }
 
+    setupDragAndDrop() {
+        if (!this.dropZone) return;
+
+        // Drop zone events
+        this.dropZone.addEventListener('click', () => {
+            this.fileInput.click();
+        });
+
+        this.dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            this.dropZone.classList.add('drag-over');
+        });
+
+        this.dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            if (!this.dropZone.contains(e.relatedTarget)) {
+                this.dropZone.classList.remove('drag-over');
+            }
+        });
+
+        this.dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            this.dropZone.classList.remove('drag-over');
+            const files = Array.from(e.dataTransfer.files);
+            this.handleFileSelection(files);
+        });
+
+        // Global drag events for folder drag & drop
+        document.addEventListener('dragstart', (e) => {
+            const fileItem = e.target.closest('.file-item, .folder-item');
+            if (fileItem) {
+                this.draggedItem = {
+                    id: fileItem.dataset.fileId || fileItem.dataset.folderId,
+                    type: fileItem.classList.contains('folder-item') ? 'folder' : 'file',
+                    element: fileItem
+                };
+                fileItem.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+            }
+        });
+
+        document.addEventListener('dragend', (e) => {
+            if (this.draggedItem) {
+                this.draggedItem.element.classList.remove('dragging');
+                this.draggedItem = null;
+            }
+            // Remove drag-over from all elements
+            document.querySelectorAll('.drag-over').forEach(el => {
+                el.classList.remove('drag-over');
+            });
+        });
+
+        document.addEventListener('dragover', (e) => {
+            if (this.draggedItem) {
+                e.preventDefault();
+            }
+        });
+
+        document.addEventListener('drop', (e) => {
+            if (this.draggedItem) {
+                e.preventDefault();
+                const targetFolder = e.target.closest('.folder-item');
+                if (targetFolder && targetFolder !== this.draggedItem.element) {
+                    const targetFolderId = targetFolder.dataset.folderId;
+                    this.moveItemToFolder(this.draggedItem, targetFolderId);
+                }
+            }
+        });
+    }
+
+    setupModalEvents() {
+        // Create folder modal
+        this.cancelCreateFolderBtn?.addEventListener('click', () => {
+            this.hideCreateFolderModal();
+        });
+
+        this.confirmCreateFolderBtn?.addEventListener('click', () => {
+            this.handleCreateFolder();
+        });
+
+        this.folderNameInput?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.handleCreateFolder();
+            }
+        });
+
+        // Rename modal
+        this.cancelRenameBtn?.addEventListener('click', () => {
+            this.hideRenameModal();
+        });
+
+        this.confirmRenameBtn?.addEventListener('click', () => {
+            this.handleRename();
+        });
+
+        this.newItemNameInput?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.handleRename();
+            }
+        });
+
+        // Move modal
+        this.cancelMoveBtn?.addEventListener('click', () => {
+            this.hideMoveModal();
+        });
+
+        this.confirmMoveBtn?.addEventListener('click', () => {
+            this.handleMove();
+        });
+
+        // Upload modal
+        this.cancelUploadBtn?.addEventListener('click', () => {
+            this.cancelUpload();
+        });
+
+        // Share modal
+        this.shareType?.addEventListener('change', () => {
+            this.updateShareOptions();
+        });
+
+        this.cancelShareBtn?.addEventListener('click', () => {
+            this.hideShareModal();
+        });
+
+        this.confirmShareBtn?.addEventListener('click', () => {
+            this.handleShareConfirm();
+        });
+
+        // Preview modal
+        this.closePreviewBtn?.addEventListener('click', () => {
+            this.closePreview();
+        });
+
+        // Close modals when clicking outside
+        [this.uploadModal, this.createFolderModal, this.renameModal, this.moveModal, this.shareModal, this.previewModal].forEach(modal => {
+            if (modal) {
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        modal.style.display = 'none';
+                    }
+                });
+            }
+        });
+    }
+
+    setupContextMenu() {
+        this.contextRename?.addEventListener('click', () => {
+            this.showRenameModal();
+            this.hideContextMenu();
+        });
+
+        this.contextMove?.addEventListener('click', () => {
+            this.showMoveModal();
+            this.hideContextMenu();
+        });
+
+        this.contextShare?.addEventListener('click', () => {
+            this.showShareModal(this.contextItem.id);
+            this.hideContextMenu();
+        });
+
+        this.contextDelete?.addEventListener('click', () => {
+            this.deleteItem();
+            this.hideContextMenu();
+        });
+    }
+
     setupAuthListener() {
-        // Subscribe to global auth state changes
         authManager.onAuthStateChanged(async (user) => {
             if (user) {
                 this.currentUser = user;
-                
-                // Load user files
-                await this.loadFiles();
-                
-                // Check for resource parameter in URL (for notifications)
+                await this.loadFolderContents();
                 this.checkForResourceParameter();
             } else {
                 this.showAuthAlert();
@@ -166,24 +327,21 @@ class ResourcesManager {
     checkForResourceParameter() {
         const urlParams = new URLSearchParams(window.location.search);
         const resourceId = urlParams.get('resource');
-        const fileId = urlParams.get('file'); // Legacy support
+        const fileId = urlParams.get('file');
         
         const targetId = resourceId || fileId;
         if (targetId) {
-            // Find and highlight the resource after a short delay to ensure everything is loaded
             setTimeout(() => {
-                const fileElement = document.querySelector(`[data-file-id="${targetId}"]`);
-                if (fileElement) {
-                    fileElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    // Highlight the file briefly
-                    fileElement.style.backgroundColor = 'rgba(255, 214, 0, 0.2)';
-                    fileElement.style.border = '2px solid #ffd600';
+                const element = document.querySelector(`[data-file-id="${targetId}"], [data-folder-id="${targetId}"]`);
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    element.style.backgroundColor = 'rgba(255, 214, 0, 0.2)';
+                    element.style.border = '2px solid #ffd600';
                     setTimeout(() => {
-                        fileElement.style.backgroundColor = '';
-                        fileElement.style.border = '';
+                        element.style.backgroundColor = '';
+                        element.style.border = '';
                     }, 3000);
                 }
-                // Clean up the URL parameter
                 const newUrl = window.location.pathname;
                 window.history.replaceState({}, document.title, newUrl);
             }, 1000);
@@ -195,9 +353,8 @@ class ResourcesManager {
         window.location.href = 'login.html';
     }
 
-    async loadFiles() {
+    async loadFolderContents() {
         try {
-            // Get user's groups first
             const { getDocs, query, where, collection } = await import('https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js');
             const { db } = await import('/config/firebase-config.js');
             
@@ -209,127 +366,490 @@ class ResourcesManager {
             const groupsSnapshot = await getDocs(groupsQuery);
             const userGroups = groupsSnapshot.docs.map(doc => doc.id);
             
-            // Load files including shared ones
-            this.files = await ResourcesService.getUserFilesWithShared(this.currentUser.uid, userGroups);
+            const contents = await ResourcesService.getFolderContents(this.currentUser.uid, this.currentFolderId, userGroups);
+            this.folders = contents.folders || [];
+            this.files = contents.files || [];
+            
+            this.filteredFolders = [...this.folders];
             this.filteredFiles = [...this.files];
-            this.renderFiles();
+            
+            this.updateBreadcrumb();
+            this.renderItems();
         } catch (error) {
-            console.error('Error loading files:', error);
-            this.showError('Failed to load files');
+            console.error('Error loading folder contents:', error);
+            this.showError('Failed to load folder contents');
         }
     }
 
-    filterFiles(searchTerm) {
-        this.filteredFiles = ResourcesService.searchFiles(this.files, searchTerm);
-        this.renderFiles();
+    async navigateToFolder(folderId) {
+        this.currentFolderId = folderId;
+        await this.loadFolderContents();
+    }
+
+    async updateBreadcrumb() {
+        if (this.currentFolderId) {
+            this.folderPath = await ResourcesService.getFolderPath(this.currentFolderId);
+        } else {
+            this.folderPath = [];
+        }
+
+        this.renderBreadcrumb();
+    }
+
+    renderBreadcrumb() {
+        if (!this.breadcrumbList) return;
+
+        // Clear existing breadcrumbs except root
+        const rootItem = this.breadcrumbList.querySelector('.breadcrumb-item');
+        this.breadcrumbList.innerHTML = '';
+        this.breadcrumbList.appendChild(rootItem);
+
+        // Add folder path
+        this.folderPath.forEach((folder, index) => {
+            const li = document.createElement('li');
+            li.className = 'breadcrumb-item';
+            
+            const button = document.createElement('button');
+            button.className = 'breadcrumb-btn';
+            button.textContent = folder.name;
+            button.addEventListener('click', () => {
+                this.navigateToFolder(folder.id);
+            });
+            
+            li.appendChild(button);
+            this.breadcrumbList.appendChild(li);
+        });
+    }
+
+    filterItems(searchTerm) {
+        if (!searchTerm.trim()) {
+            this.filteredFolders = [...this.folders];
+            this.filteredFiles = [...this.files];
+        } else {
+            const term = searchTerm.toLowerCase();
+            this.filteredFolders = this.folders.filter(folder => 
+                folder.name.toLowerCase().includes(term)
+            );
+            this.filteredFiles = ResourcesService.searchFiles(this.files, searchTerm);
+        }
+        this.renderItems();
     }
 
     filterByType(filterType) {
         const currentUser = this.currentUser;
         if (!currentUser) return;
 
+        let filteredFolders = [...this.folders];
+        let filteredFiles = [...this.files];
+
         switch (filterType) {
             case 'my-files':
-                this.filteredFiles = this.files.filter(file => file.userId === currentUser.uid);
+                filteredFolders = this.folders.filter(folder => folder.userId === currentUser.uid);
+                filteredFiles = this.files.filter(file => file.userId === currentUser.uid);
                 break;
             case 'shared-with-me':
-                this.filteredFiles = this.files.filter(file => 
+                filteredFolders = this.folders.filter(folder => 
+                    folder.userId !== currentUser.uid && (
+                        folder.isShared === true ||
+                        (folder.sharedWith && folder.sharedWith.includes(currentUser.uid)) ||
+                        (folder.shareType === 'group' && folder.groupId)
+                    )
+                );
+                filteredFiles = this.files.filter(file => 
                     file.userId !== currentUser.uid && (
                         file.isShared === true ||
                         (file.sharedWith && file.sharedWith.includes(currentUser.uid)) ||
-                        (file.shareType === 'group' && file.groupId) // Would need to check user's groups
+                        (file.shareType === 'group' && file.groupId)
                     )
                 );
                 break;
             case 'shared-by-me':
-                this.filteredFiles = this.files.filter(file => 
+                filteredFolders = this.folders.filter(folder => 
+                    folder.userId === currentUser.uid && folder.isShared === true
+                );
+                filteredFiles = this.files.filter(file => 
                     file.userId === currentUser.uid && file.isShared === true
                 );
                 break;
             case 'all':
             default:
-                this.filteredFiles = [...this.files];
+                // Keep current filtered state
                 break;
         }
         
-        // Apply any existing search filter
+        // Apply search filter if active
         if (this.searchInput && this.searchInput.value.trim()) {
-            this.filteredFiles = ResourcesService.searchFiles(this.filteredFiles, this.searchInput.value);
+            const term = this.searchInput.value.toLowerCase();
+            filteredFolders = filteredFolders.filter(folder => 
+                folder.name.toLowerCase().includes(term)
+            );
+            filteredFiles = ResourcesService.searchFiles(filteredFiles, this.searchInput.value);
         }
         
-        this.renderFiles();
+        this.filteredFolders = filteredFolders;
+        this.filteredFiles = filteredFiles;
+        this.renderItems();
     }
 
-    renderFiles() {
-        if (this.filteredFiles.length === 0) {
+    renderItems() {
+        if (this.filteredFolders.length === 0 && this.filteredFiles.length === 0) {
             this.renderEmptyState();
             return;
         }
 
-        this.filesList.innerHTML = this.filteredFiles.map(file => {
-            const category = ResourcesService.getFileTypeCategory(file.type);
-            const extension = ResourcesService.getFileExtension(file.name);
-            const size = ResourcesService.formatFileSize(file.size);
-            const date = ResourcesService.formatDate(file.uploadedAt);
+        const foldersHTML = this.filteredFolders.map(folder => this.renderFolder(folder)).join('');
+        const filesHTML = this.filteredFiles.map(file => this.renderFile(file)).join('');
+        
+        this.filesList.innerHTML = foldersHTML + filesHTML;
+        this.bindItemEvents();
+    }
 
-            return `
-                <div class="file-item" data-file-id="${file.id}">
-                    <div class="file-actions">
-                        <button class="file-action-btn" onclick="resourcesManager.previewFile('${file.id}')" title="Preview">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                            </svg>
-                        </button>
-                        <button class="file-action-btn" onclick="resourcesManager.showShareModal('${file.id}')" title="Share">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314a2.25 2.25 0 1 1 .434 2.44L7.217 13.747m0-2.186 9.566 5.314m-9.566-5.314L7.217 13.747M10.5 12a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
-                            </svg>
-                        </button>
-                        <button class="file-action-btn" onclick="resourcesManager.downloadFile('${file.id}')" title="Download">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                            </svg>
-                        </button>
-                        <button class="file-action-btn" onclick="resourcesManager.deleteFile('${file.id}', '${file.storagePath}')" title="Delete">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                            </svg>
-                        </button>
+    renderFolder(folder) {
+        const folderCount = 0; // We could load this if needed
+        const date = ResourcesService.formatDate(folder.createdAt);
+
+        return `
+            <div class="folder-item" data-folder-id="${folder.id}" draggable="true">
+                <div class="folder-item-header">
+                    <div class="folder-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
+                        </svg>
                     </div>
-                    <div class="file-item-header">
-                        <div class="file-icon ${category}">
-                            ${extension}
-                        </div>
-                        <div class="file-name" title="${file.name}">
-                            ${file.name}
-                        </div>
-                    </div>
-                    <div class="file-info">
-                        <span class="file-size">${size}</span>
-                        <span class="file-date">${date}</span>
+                    <div class="folder-name" title="${folder.name}">
+                        ${folder.name}
                     </div>
                 </div>
-            `;
-        }).join('');
+                <div class="folder-info">
+                    <span class="folder-item-count">${folderCount} items</span>
+                    <span class="folder-date">${date}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    renderFile(file) {
+        const category = ResourcesService.getFileTypeCategory(file.type);
+        const extension = ResourcesService.getFileExtension(file.name);
+        const size = ResourcesService.formatFileSize(file.size);
+        const date = ResourcesService.formatDate(file.uploadedAt);
+
+        return `
+            <div class="file-item" data-file-id="${file.id}" draggable="true">
+                <div class="file-actions">
+                    <button class="file-action-btn" onclick="resourcesManager.previewFile('${file.id}')" title="Preview">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                        </svg>
+                    </button>
+                    <button class="file-action-btn" onclick="resourcesManager.showShareModal('${file.id}')" title="Share">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314a2.25 2.25 0 1 1 .434 2.44L7.217 13.747m0-2.186 9.566 5.314m-9.566-5.314L7.217 13.747M10.5 12a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+                        </svg>
+                    </button>
+                    <button class="file-action-btn" onclick="resourcesManager.downloadFile('${file.id}')" title="Download">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                        </svg>
+                    </button>
+                    <button class="file-action-btn" onclick="resourcesManager.deleteFile('${file.id}', '${file.storagePath}')" title="Delete">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="file-item-header">
+                    <div class="file-icon ${category}">
+                        ${extension}
+                    </div>
+                    <div class="file-name" title="${file.name}">
+                        ${file.name}
+                    </div>
+                </div>
+                <div class="file-info">
+                    <span class="file-size">${size}</span>
+                    <span class="file-date">${date}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    bindItemEvents() {
+        // Double-click to open folders
+        document.querySelectorAll('.folder-item').forEach(folderElement => {
+            folderElement.addEventListener('dblclick', () => {
+                const folderId = folderElement.dataset.folderId;
+                this.navigateToFolder(folderId);
+            });
+
+            folderElement.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                this.showContextMenu(e, folderId, 'folder');
+            });
+
+            // Drag over folder
+            folderElement.addEventListener('dragover', (e) => {
+                if (this.draggedItem && this.draggedItem.element !== folderElement) {
+                    e.preventDefault();
+                    folderElement.classList.add('drag-over');
+                }
+            });
+
+            folderElement.addEventListener('dragleave', () => {
+                folderElement.classList.remove('drag-over');
+            });
+        });
+
+        // File events
+        document.querySelectorAll('.file-item').forEach(fileElement => {
+            fileElement.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                const fileId = fileElement.dataset.fileId;
+                this.showContextMenu(e, fileId, 'file');
+            });
+        });
     }
 
     renderEmptyState() {
         this.filesList.innerHTML = `
             <div class="empty-state">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026C6.154 9.75 8.25 11.846 8.25 14.5c0 2.654-2.096 4.75-4.656 4.75-.117 0-.232-.009-.344-.026m4.656-4.75L8.25 14.5m-4.656 0c-.117-.017-.232-.026-.344-.026C.846 14.474 0 13.628 0 12.75S.846 11.026 2.094 11.026c.112 0 .227.009.344.026M12 7.5h1.5m-1.5 0a2.25 2.25 0 0 1 2.25 2.25V12m-2.25-4.5a2.25 2.25 0 0 0-2.25 2.25V12m0 0V9.75a2.25 2.25 0 0 1 2.25-2.25m0 0h7.5A2.25 2.25 0 0 1 21 9.75v.75M12 12v2.25a2.25 2.25 0 0 0 2.25 2.25M12 12l-8.25-8.25M12 12l8.25 8.25" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
                 </svg>
-                <h3>No files found</h3>
-                <p>Upload some files to get started or try a different search term.</p>
+                <h3>This folder is empty</h3>
+                <p>Upload some files or create folders to get started.</p>
             </div>
         `;
     }
 
+    // Folder Management Methods
+    showCreateFolderModal() {
+        this.folderNameInput.value = '';
+        this.createFolderModal.style.display = 'flex';
+        this.folderNameInput.focus();
+    }
+
+    hideCreateFolderModal() {
+        this.createFolderModal.style.display = 'none';
+    }
+
+    async handleCreateFolder() {
+        const name = this.folderNameInput.value.trim();
+        if (!name) {
+            this.showError('Please enter a folder name');
+            return;
+        }
+
+        try {
+            await ResourcesService.createFolder(name, this.currentFolderId, this.currentUser.uid);
+            this.hideCreateFolderModal();
+            this.showSuccess('Folder created successfully');
+            await this.loadFolderContents();
+        } catch (error) {
+            console.error('Error creating folder:', error);
+            this.showError('Failed to create folder');
+        }
+    }
+
+    showContextMenu(event, itemId, itemType) {
+        this.contextItem = { id: itemId, type: itemType };
+        
+        const x = event.clientX;
+        const y = event.clientY;
+        
+        this.contextMenu.style.left = `${x}px`;
+        this.contextMenu.style.top = `${y}px`;
+        this.contextMenu.style.display = 'block';
+        
+        // Adjust position if menu goes off screen
+        const rect = this.contextMenu.getBoundingClientRect();
+        if (rect.right > window.innerWidth) {
+            this.contextMenu.style.left = `${x - rect.width}px`;
+        }
+        if (rect.bottom > window.innerHeight) {
+            this.contextMenu.style.top = `${y - rect.height}px`;
+        }
+    }
+
+    hideContextMenu() {
+        this.contextMenu.style.display = 'none';
+        this.contextItem = null;
+    }
+
+    showRenameModal() {
+        if (!this.contextItem) return;
+        
+        const item = this.contextItem.type === 'folder' ? 
+            this.folders.find(f => f.id === this.contextItem.id) :
+            this.files.find(f => f.id === this.contextItem.id);
+            
+        if (!item) return;
+        
+        this.renameModalTitle.textContent = `Rename ${this.contextItem.type === 'folder' ? 'Folder' : 'File'}`;
+        this.newItemNameInput.value = item.name;
+        this.renameModal.style.display = 'flex';
+        this.newItemNameInput.focus();
+        this.newItemNameInput.select();
+    }
+
+    hideRenameModal() {
+        this.renameModal.style.display = 'none';
+    }
+
+    async handleRename() {
+        if (!this.contextItem) return;
+        
+        const newName = this.newItemNameInput.value.trim();
+        if (!newName) {
+            this.showError('Please enter a name');
+            return;
+        }
+
+        try {
+            const isFolder = this.contextItem.type === 'folder';
+            await ResourcesService.renameItem(this.contextItem.id, newName, isFolder);
+            this.hideRenameModal();
+            this.showSuccess(`${isFolder ? 'Folder' : 'File'} renamed successfully`);
+            await this.loadFolderContents();
+        } catch (error) {
+            console.error('Error renaming item:', error);
+            this.showError('Failed to rename item');
+        }
+    }
+
+    async showMoveModal() {
+        if (!this.contextItem) return;
+        
+        this.moveModalTitle.textContent = `Move ${this.contextItem.type === 'folder' ? 'Folder' : 'File'}`;
+        this.moveModal.style.display = 'flex';
+        
+        // Load folder tree
+        await this.loadFolderTree();
+    }
+
+    hideMoveModal() {
+        this.moveModal.style.display = 'none';
+        this.selectedTargetFolder = null;
+    }
+
+    async loadFolderTree() {
+        try {
+            // For simplicity, we'll show a flat list of folders
+            // In a full implementation, you'd want a proper tree structure
+            const allFolders = await ResourcesService.getFolders(this.currentUser.uid, null, []);
+            
+            this.folderTree.innerHTML = `
+                <div class="folder-tree-item ${!this.selectedTargetFolder ? 'selected' : ''}" data-folder-id="">
+                    <div class="folder-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+                        </svg>
+                    </div>
+                    Root Folder
+                </div>
+            `;
+            
+            allFolders.forEach(folder => {
+                if (folder.id !== this.contextItem.id) { // Don't allow moving into self
+                    const div = document.createElement('div');
+                    div.className = 'folder-tree-item';
+                    div.dataset.folderId = folder.id;
+                    div.innerHTML = `
+                        <div class="folder-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
+                            </svg>
+                        </div>
+                        ${folder.name}
+                    `;
+                    this.folderTree.appendChild(div);
+                }
+            });
+            
+            // Bind click events
+            this.folderTree.querySelectorAll('.folder-tree-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    this.folderTree.querySelectorAll('.folder-tree-item').forEach(i => i.classList.remove('selected'));
+                    item.classList.add('selected');
+                    this.selectedTargetFolder = item.dataset.folderId || null;
+                });
+            });
+            
+        } catch (error) {
+            console.error('Error loading folder tree:', error);
+            this.showError('Failed to load folders');
+        }
+    }
+
+    async handleMove() {
+        if (!this.contextItem) return;
+        
+        try {
+            const isFolder = this.contextItem.type === 'folder';
+            if (isFolder) {
+                await ResourcesService.moveFolder(this.contextItem.id, this.selectedTargetFolder);
+            } else {
+                await ResourcesService.moveFile(this.contextItem.id, this.selectedTargetFolder);
+            }
+            
+            this.hideMoveModal();
+            this.showSuccess(`${isFolder ? 'Folder' : 'File'} moved successfully`);
+            await this.loadFolderContents();
+        } catch (error) {
+            console.error('Error moving item:', error);
+            this.showError('Failed to move item');
+        }
+    }
+
+    async moveItemToFolder(draggedItem, targetFolderId) {
+        try {
+            if (draggedItem.type === 'folder') {
+                await ResourcesService.moveFolder(draggedItem.id, targetFolderId);
+            } else {
+                await ResourcesService.moveFile(draggedItem.id, targetFolderId);
+            }
+            
+            this.showSuccess(`${draggedItem.type === 'folder' ? 'Folder' : 'File'} moved successfully`);
+            await this.loadFolderContents();
+        } catch (error) {
+            console.error('Error moving item:', error);
+            this.showError('Failed to move item');
+        }
+    }
+
+    async deleteItem() {
+        if (!this.contextItem) return;
+        
+        const itemType = this.contextItem.type;
+        const itemName = itemType === 'folder' ? 
+            this.folders.find(f => f.id === this.contextItem.id)?.name :
+            this.files.find(f => f.id === this.contextItem.id)?.name;
+            
+        if (!confirm(`Are you sure you want to delete this ${itemType}${itemName ? ` "${itemName}"` : ''}?`)) {
+            return;
+        }
+
+        try {
+            if (itemType === 'folder') {
+                await ResourcesService.deleteFolder(this.contextItem.id, this.currentUser.uid);
+            } else {
+                const file = this.files.find(f => f.id === this.contextItem.id);
+                await ResourcesService.deleteFile(this.contextItem.id, file.storagePath);
+            }
+            
+            this.showSuccess(`${itemType === 'folder' ? 'Folder' : 'File'} deleted successfully`);
+            await this.loadFolderContents();
+        } catch (error) {
+            console.error('Error deleting item:', error);
+            this.showError('Failed to delete item');
+        }
+    }
+
+    // File Management Methods (existing methods updated for folder context)
     async handleFileSelection(files) {
         if (!files || files.length === 0) return;
 
-        // Validate files
         const validFiles = [];
         for (const file of files) {
             try {
@@ -343,19 +863,14 @@ class ResourcesManager {
         if (validFiles.length === 0) return;
 
         try {
-            // First upload the files and get their IDs
             const uploadedFileIds = await this.uploadFiles(validFiles);
             
             if (uploadedFileIds && uploadedFileIds.length > 0) {
-                // Store the file IDs for sharing
                 this.selectedFiles = uploadedFileIds;
-                
-                // Show sharing options modal
                 this.showShareModal();
             }
         } catch (error) {
             console.error('Error uploading files:', error);
-            // Don't show share modal if upload failed
         }
     }
 
@@ -377,8 +892,7 @@ class ResourcesManager {
                 }
             }
 
-            // Reload files list
-            await this.loadFiles();
+            await this.loadFolderContents();
             this.hideUploadModal();
             this.showSuccess(`Successfully uploaded ${files.length} file(s)`);
             
@@ -395,7 +909,6 @@ class ResourcesManager {
     async uploadSingleFile(file, index) {
         const progressId = `progress-${index}`;
         
-        // Add progress item to modal
         const progressItem = document.createElement('div');
         progressItem.className = 'progress-item';
         progressItem.id = progressId;
@@ -417,6 +930,7 @@ class ResourcesManager {
             const result = await ResourcesService.uploadFile(
                 file,
                 this.currentUser.uid,
+                this.currentFolderId, // Upload to current folder
                 (progress) => {
                     progressBar.style.width = `${progress}%`;
                     progressStatus.textContent = `${progress}%`;
@@ -426,7 +940,7 @@ class ResourcesManager {
             progressStatus.textContent = 'Complete';
             progressBar.style.width = '100%';
             
-            return result.id; // Return the file ID
+            return result.id;
         } catch (error) {
             progressStatus.textContent = 'Failed';
             progressBar.style.background = '#f44336';
@@ -445,11 +959,11 @@ class ResourcesManager {
     }
 
     cancelUpload() {
-        // Note: In a real implementation, you'd cancel ongoing uploads here
         this.isUploading = false;
         this.hideUploadModal();
     }
 
+    // File preview, download, and sharing methods remain the same
     async previewFile(fileId) {
         const file = this.files.find(f => f.id === fileId);
         if (!file) return;
@@ -474,7 +988,6 @@ class ResourcesManager {
             } else if (file.type === 'application/pdf') {
                 previewHTML = `<iframe src="${file.downloadURL}"></iframe>`;
             } else if (file.type.startsWith('text/') || file.type.includes('json') || file.type.includes('javascript')) {
-                // Fetch text content for preview
                 const response = await fetch(file.downloadURL);
                 const text = await response.text();
                 previewHTML = `<pre>${this.escapeHtml(text)}</pre>`;
@@ -510,7 +1023,7 @@ class ResourcesManager {
 
         try {
             await ResourcesService.deleteFile(fileId, storagePath);
-            await this.loadFiles();
+            await this.loadFolderContents();
             this.showSuccess('File deleted successfully');
         } catch (error) {
             console.error('Delete error:', error);
@@ -524,53 +1037,8 @@ class ResourcesManager {
         return div.innerHTML;
     }
 
-    showSuccess(message) {
-        // Simple success notification - you can replace with a better notification system
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #4CAF50;
-            color: white;
-            padding: 1rem;
-            border-radius: 8px;
-            z-index: 2000;
-            animation: slideIn 0.3s ease;
-        `;
-        notification.textContent = message;
-        document.body.appendChild(notification);
-
-        setTimeout(() => {
-            notification.remove();
-        }, 3000);
-    }
-
-    showError(message) {
-        // Simple error notification - you can replace with a better notification system
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #f44336;
-            color: white;
-            padding: 1rem;
-            border-radius: 8px;
-            z-index: 2000;
-            animation: slideIn 0.3s ease;
-        `;
-        notification.textContent = message;
-        document.body.appendChild(notification);
-
-        setTimeout(() => {
-            notification.remove();
-        }, 5000);
-    }
-
-    // Sharing modal functions
+    // Sharing functionality (existing methods remain the same)
     async showShareModal(fileId = null) {
-        // Store the file ID if sharing a specific file
         this.shareFileId = fileId;
         
         await this.loadGroups();
@@ -583,7 +1051,6 @@ class ResourcesManager {
         this.selectedFiles = [];
         this.shareFileId = null;
         
-        // Reset form
         this.shareType.value = 'group';
         this.shareDescription.value = '';
         this.updateShareOptions();
@@ -598,7 +1065,6 @@ class ResourcesManager {
 
     async loadGroups() {
         try {
-            // Load user's groups
             const { getDocs, query, where, collection } = await import('https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js');
             const { db } = await import('/config/firebase-config.js');
             
@@ -627,7 +1093,6 @@ class ResourcesManager {
             const { getDocs, collection } = await import('https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js');
             const { db } = await import('/config/firebase-config.js');
             
-            // Create a search-based interface for users
             this.userSelection.innerHTML = `
                 <label for="userSelect">Search Users:</label>
                 <div class="user-search-container">
@@ -643,7 +1108,6 @@ class ResourcesManager {
             let selectedUsers = new Set();
             let allUsers = [];
             
-            // Load all users once
             const usersSnapshot = await getDocs(collection(db, 'users'));
             usersSnapshot.forEach(doc => {
                 const user = doc.data();
@@ -656,7 +1120,6 @@ class ResourcesManager {
                 }
             });
             
-            // Search functionality
             userSearchInput.addEventListener('input', (e) => {
                 const searchTerm = e.target.value.trim();
                 
@@ -686,7 +1149,6 @@ class ResourcesManager {
                 userSearchResults.style.display = 'block';
             });
             
-            // Handle user selection
             userSearchResults.addEventListener('click', (e) => {
                 const userResult = e.target.closest('.user-search-result');
                 if (userResult) {
@@ -708,7 +1170,6 @@ class ResourcesManager {
                 }
             });
             
-            // Handle user removal
             selectedUsersList.addEventListener('click', (e) => {
                 if (e.target.classList.contains('remove-user-btn')) {
                     const userId = e.target.dataset.userId;
@@ -717,14 +1178,12 @@ class ResourcesManager {
                 }
             });
             
-            // Hide results when clicking outside
             document.addEventListener('click', (e) => {
                 if (!e.target.closest('.user-search-container')) {
                     userSearchResults.style.display = 'none';
                 }
             });
             
-            // Store reference for later access
             this.getSelectedUsers = () => Array.from(selectedUsers);
             
         } catch (error) {
@@ -759,20 +1218,16 @@ class ResourcesManager {
                 shareData.userIds = selectedUsers;
             }
 
-            // Determine which files to share
             let filesToShare = [];
             if (this.shareFileId) {
-                // Sharing a specific file
                 filesToShare = [this.shareFileId];
             } else if (this.selectedFiles && this.selectedFiles.length > 0) {
-                // Sharing selected files
                 filesToShare = this.selectedFiles;
             } else {
                 this.showError('No files selected for sharing');
                 return;
             }
 
-            // Share the files
             for (const fileId of filesToShare) {
                 await ResourcesService.shareFile(fileId, shareData, this.currentUser.uid);
             }
@@ -780,79 +1235,53 @@ class ResourcesManager {
             this.showSuccess(`Successfully shared ${filesToShare.length} file(s)`);
             this.hideShareModal();
             
-            // Reload files to show updated sharing status
-            await this.loadFiles();
+            await this.loadFolderContents();
         } catch (error) {
             console.error('Error sharing files:', error);
             this.showError('Failed to share files: ' + error.message);
         }
     }
 
-    async uploadFilesWithSharing(files, shareData) {
-        if (this.isUploading) return;
+    showSuccess(message) {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #4CAF50;
+            color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            z-index: 2000;
+            animation: slideIn 0.3s ease;
+        `;
+        notification.textContent = message;
+        document.body.appendChild(notification);
 
-        this.isUploading = true;
-        this.uploadQueue = [...files];
-        this.showUploadModal();
-
-        try {
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                await this.uploadSingleFileWithSharing(file, i, shareData);
-            }
-
-            // Reload files list
-            await this.loadFiles();
-            this.hideUploadModal();
-            this.showSuccess(`Successfully uploaded and shared ${files.length} file(s)`);
-        } catch (error) {
-            console.error('Upload error:', error);
-            this.showError('Upload failed: ' + error.message);
-        } finally {
-            this.isUploading = false;
-        }
+        setTimeout(() => {
+            notification.remove();
+        }, 3000);
     }
 
-    async uploadSingleFileWithSharing(file, index, shareData) {
-        const progressId = `progress-${index}`;
-        
-        // Add progress item to modal
-        const progressItem = document.createElement('div');
-        progressItem.className = 'progress-item';
-        progressItem.id = progressId;
-        progressItem.innerHTML = `
-            <div class="progress-info">
-                <div class="progress-name">${file.name}</div>
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: 0%"></div>
-                </div>
-                <div class="progress-status">Preparing...</div>
-            </div>
+    showError(message) {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #f44336;
+            color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            z-index: 2000;
+            animation: slideIn 0.3s ease;
         `;
-        this.uploadProgress.appendChild(progressItem);
+        notification.textContent = message;
+        document.body.appendChild(notification);
 
-        const progressBar = progressItem.querySelector('.progress-fill');
-        const progressStatus = progressItem.querySelector('.progress-status');
-
-        try {
-            await ResourcesService.uploadFileWithSharing(
-                file,
-                this.currentUser.uid,
-                shareData,
-                (progress) => {
-                    progressBar.style.width = `${progress}%`;
-                    progressStatus.textContent = `${Math.round(progress)}%`;
-                }
-            );
-
-            progressStatus.textContent = 'Complete';
-            progressItem.classList.add('complete');
-        } catch (error) {
-            console.error(`Upload failed for ${file.name}:`, error);
-            progressStatus.textContent = 'Failed';
-            progressItem.classList.add('error');
-            throw error;
-        }
+        setTimeout(() => {
+            notification.remove();
+        }, 5000);
     }
 }
 
