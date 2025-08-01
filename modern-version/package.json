@@ -11,6 +11,7 @@
     "deploy:test": "firebase use nepp-test-server && firebase deploy"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "node": "22"
   }
 }
+
