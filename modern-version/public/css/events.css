@@ -1346,3 +1346,27 @@
         padding: 0.75rem;
     }
 }
+/* Prevent calendar from hugging the right side on smaller screens */
+.events-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.events-calendar {
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: 1rem; /* Add spacing from right side */
+  margin-right: auto;  /* Prevents pushing to right */
+}
+
+/* Optional: make layout responsive */
+@media (max-width: 1024px) {
+  .events-layout {
+    flex-direction: column;
+  }
+
+  .events-sidebar {
+    width: 100%;
+  }
+}
+
