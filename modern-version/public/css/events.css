@@ -1370,3 +1370,16 @@
   }
 }
 
+/* Fix calendar overflow */
+.calendar-container {
+  padding-right: 1rem;  /* or more if needed */
+  margin-right: 1rem;
+  overflow-x: auto; /* ensures it doesn't get cut off */
+  box-sizing: border-box;
+}
+/* More general override for the calendar wrapper */
+#calendar, .fc { 
+  max-width: 100%;
+  box-sizing: border-box;
+  padding-right: 1rem;
+}
