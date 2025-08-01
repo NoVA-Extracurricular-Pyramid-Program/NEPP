@@ -11,7 +11,8 @@ import {
     serverTimestamp,
     arrayUnion,
     arrayRemove,
-    getDoc 
+    getDoc,
+    writeBatch 
 } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js';
 import { db } from '/config/firebase-config.js';
 
@@ -275,7 +276,15 @@ class GroupsService {
                 throw new Error('Group not found');
             }
 
-            const data = groupDoc.data();
+            let data = groupDoc.data();
+            
+            // Ensure the group has a join code
+            if (!data.joinCode) {
+                const joinCode = this.generateJoinCode();
+                await updateDoc(groupRef, { joinCode: joinCode });
+                data.joinCode = joinCode;
+            }
+
             return {
                 id: groupDoc.id,
                 ...data,
@@ -627,6 +636,20 @@ class GroupsService {
         return `${memberCount} member${memberCount !== 1 ? 's' : ''}`;
     }
 
+    // Update member permissions
+    async updateMemberPermissions(groupId, memberId, permissions) {
+        try {
+            const groupRef = doc(db, this.collectionName, groupId);
+            await updateDoc(groupRef, {
+                [`memberPermissions.${memberId}`]: permissions,
+                updatedAt: serverTimestamp()
+            });
+        } catch (error) {
+            console.error('Error updating member permissions:', error);
+            throw error;
+        }
+    }
+
     // Validate group data
     validateGroupData(groupData) {
         if (!groupData.name || groupData.name.trim().length < 2) {
@@ -650,6 +673,34 @@ class GroupsService {
         }
 
         return true;
+    }
+
+    // Generate join code for a specific group (only if user has permission)
+    async generateJoinCodeForGroup(groupId, userId) {
+        try {
+            const groupRef = doc(db, this.collectionName, groupId);
+            const groupDoc = await getDoc(groupRef);
+            
+            if (!groupDoc.exists()) {
+                throw new Error('Group not found');
+            }
+
+            const groupData = groupDoc.data();
+            const userRole = this.getUserRole(groupData, userId);
+            
+            // Check if user has permission to generate join codes
+            if (userRole !== 'owner' && userRole !== 'admin') {
+                throw new Error('You do not have permission to generate join codes for this group');
+            }
+
+            const joinCode = this.generateJoinCode();
+            await updateDoc(groupRef, { joinCode: joinCode });
+            
+            return joinCode;
+        } catch (error) {
+            console.error('Error generating join code for group:', error);
+            throw error;
+        }
     }
 }
 

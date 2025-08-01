@@ -89,55 +89,6 @@
                             <input type="number" id="maxMembers" name="maxMembers" min="1" max="1000">
                         </div>
                         
-                        <!-- Member Management Section (only visible during edit) -->
-                        <div class="form-group" id="memberManagementGroup" style="display: none;">
-                            <label>Member Management</label>
-                            <div class="member-management-section">
-                                <div class="member-selection-type">
-                                    <label>
-                                        <input type="radio" name="memberSelectionType" value="individual" checked>
-                                        Add Individual Users
-                                    </label>
-                                    <label>
-                                        <input type="radio" name="memberSelectionType" value="group">
-                                        Add from Groups
-                                    </label>
-                                </div>
-                                
-                                <div id="individualUserSelection" class="selection-container">
-                                    <label for="userSelector">Select Users:</label>
-                                    <select id="userSelector" multiple style="width: 100%; min-height: 100px;">
-                                        <!-- Users will be populated here -->
-                                    </select>
-                                </div>
-                                
-                                <div id="groupMemberSelection" class="selection-container" style="display: none;">
-                                    <label for="groupSelector">Select from Groups:</label>
-                                    <select id="groupSelector" multiple style="width: 100%; min-height: 100px;">
-                                        <!-- Groups will be populated here -->
-                                    </select>
-                                </div>
-                                
-                                <div class="current-members">
-                                    <h4>Current Members:</h4>
-                                    <div id="currentMembersList">
-                                        <!-- Current members will be displayed here -->
-                                    </div>
-                                </div>
-                                
-                                <div class="co-owner-section">
-                                    <h4>Co-Owners:</h4>
-                                    <select id="coOwnerSelector">
-                                        <option value="">Select a co-owner (optional)</option>
-                                        <!-- Members will be populated here -->
-                                    </select>
-                                    <div id="currentCoOwners">
-                                        <!-- Current co-owners will be displayed here -->
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
                         <div class="form-actions">
                             <button type="button" id="cancelCreateGroup" class="cancel-btn">Cancel</button>
                             <button type="submit" class="submit-btn">Create Group</button>
@@ -170,6 +121,70 @@
                     <button class="close-btn" id="closeGroupDetails">&times;</button>
                     <div id="groupDetailsContainer">
                         <!-- Group details will be loaded here -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Member Permissions Modal -->
+            <div id="permissionsModal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <h2>Member Permissions</h2>
+                    <div id="permissionsContainer">
+                        <div class="permission-member-info">
+                            <div class="permission-member-name" id="permissionMemberName"></div>
+                            <div class="permission-member-role" id="permissionMemberRole"></div>
+                        </div>
+                        
+                        <div class="permission-groups">
+                            <div class="permission-group">
+                                <h4>Group Management</h4>
+                                <div class="permission-item">
+                                    <input type="checkbox" id="canEditGroup" class="permission-checkbox">
+                                    <label for="canEditGroup">Can edit group details</label>
+                                </div>
+                                <div class="permission-item">
+                                    <input type="checkbox" id="canDeleteGroup" class="permission-checkbox">
+                                    <label for="canDeleteGroup">Can delete group</label>
+                                </div>
+                            </div>
+                            
+                            <div class="permission-group">
+                                <h4>Member Management</h4>
+                                <div class="permission-item">
+                                    <input type="checkbox" id="canAddMembers" class="permission-checkbox">
+                                    <label for="canAddMembers">Can add new members</label>
+                                </div>
+                                <div class="permission-item">
+                                    <input type="checkbox" id="canRemoveMembers" class="permission-checkbox">
+                                    <label for="canRemoveMembers">Can remove members</label>
+                                </div>
+                                <div class="permission-item">
+                                    <input type="checkbox" id="canPromoteMembers" class="permission-checkbox">
+                                    <label for="canPromoteMembers">Can promote members to admin</label>
+                                </div>
+                            </div>
+                            
+                            <div class="permission-group">
+                                <h4>Content Management</h4>
+                                <div class="permission-item">
+                                    <input type="checkbox" id="canCreateAnnouncements" class="permission-checkbox">
+                                    <label for="canCreateAnnouncements">Can create announcements</label>
+                                </div>
+                                <div class="permission-item">
+                                    <input type="checkbox" id="canManageEvents" class="permission-checkbox">
+                                    <label for="canManageEvents">Can manage group events</label>
+                                </div>
+                                <div class="permission-item">
+                                    <input type="checkbox" id="canManageForms" class="permission-checkbox">
+                                    <label for="canManageForms">Can manage group forms</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button id="cancelPermissions" class="cancel-btn">Cancel</button>
+                        <button id="savePermissions" class="submit-btn">Save Permissions</button>
                     </div>
                 </div>
             </div>

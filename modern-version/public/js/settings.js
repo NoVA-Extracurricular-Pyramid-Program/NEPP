@@ -185,7 +185,10 @@ sendFeedbackBtn?.addEventListener('click', async () => {
       userId: auth.currentUser.uid,
       userEmail: auth.currentUser.email,
       createdAt: serverTimestamp(),
-      status: 'new'
+      status: 'new',
+      // Email notification settings
+      notifyEmail: 'nepp.advisors@gmail.com',
+      emailNotificationSent: false
     };
 
     // Include user info if requested
@@ -193,14 +196,31 @@ sendFeedbackBtn?.addEventListener('click', async () => {
       try {
         const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
         if (userDoc.exists()) {
-          feedbackData.userInfo = {
-            displayName: userDoc.data().displayName,
-            role: userDoc.data().role,
-            department: userDoc.data().department
-          };
+          const userData = userDoc.data();
+          const userInfo = {};
+          
+          // Only include fields that exist, are not null, and are not undefined
+          if (userData.displayName !== undefined && userData.displayName !== null && userData.displayName !== '') {
+            userInfo.displayName = userData.displayName;
+          }
+          if (userData.role !== undefined && userData.role !== null && userData.role !== '') {
+            userInfo.role = userData.role;
+          }
+          if (userData.department !== undefined && userData.department !== null && userData.department !== '') {
+            userInfo.department = userData.department;
+          }
+          if (userData.username !== undefined && userData.username !== null && userData.username !== '') {
+            userInfo.username = userData.username;
+          }
+          
+          // Only add userInfo to feedbackData if we have at least one valid field
+          if (Object.keys(userInfo).length > 0) {
+            feedbackData.userInfo = userInfo;
+          }
         }
       } catch (error) {
         console.warn('Could not retrieve user info:', error);
+        // Don't include userInfo if there's an error
       }
     }
 
@@ -213,7 +233,7 @@ sendFeedbackBtn?.addEventListener('click', async () => {
     includeUserInfo.checked = false;
     feedbackType.value = 'bug';
 
-    alert('Thank you for your feedback! We appreciate your input and will review it soon.');
+    alert('Thank you for your feedback! We appreciate your input and will review it soon. Your feedback has been saved to our system.');
 
   } catch (error) {
     console.error('Error sending feedback:', error);
