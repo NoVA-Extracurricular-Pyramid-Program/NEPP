@@ -84,9 +84,9 @@ function displayFormDetails(form, isAuthor) {
       ` : ''}
     </div>
     <div class="form-meta">
-      <span id="formType" class="form-type ${form.type}">${form.type.charAt(0).toUpperCase() + form.type.slice(1)}</span>
+      <span id="formType" class="form-type ${form.type || 'public'}">${(form.type || 'public').charAt(0).toUpperCase() + (form.type || 'public').slice(1)}</span>
       <span id="formDate">Created: ${form.createdAt.toDate().toLocaleDateString()}</span>
-      <span id="formDueDate">Due: ${form.dueDate.toDate().toLocaleDateString()}</span>
+      <span id="formDueDate">Due: ${form.dueDate ? form.dueDate.toDate().toLocaleDateString() : 'No due date'}</span>
     </div>
     <p id="formDescription" class="form-description">${form.description || 'No description provided'}</p>
   `;
@@ -135,6 +135,10 @@ function generateQuestionHTML(question, index) {
 
     case 'Checkboxes':
       inputHTML = generateOptionsHTML(question.options || [], index, 'checkbox', question.required);
+      break;
+
+    case 'Poll':
+      inputHTML = generateOptionsHTML(question.options || [], index, 'radio', question.required);
       break;
 
     case 'File Upload':

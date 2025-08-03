@@ -35,12 +35,18 @@ class NotificationsManager {
     }
 
     setupAuthListener() {
+        console.log('🔍 Debug: Setting up auth listener');
+        console.log('🔍 Debug: authManager available:', !!authManager);
+        
         authManager.onAuthStateChanged(async (user) => {
+            console.log('🔍 Debug: Auth state changed:', !!user);
             if (user) {
                 this.currentUser = user;
+                console.log('✅ Debug: Current user set:', this.currentUser.uid);
                 await this.loadNotifications();
                 this.startPolling();
             } else {
+                console.log('❌ Debug: No user, redirecting to login');
                 window.location.href = '/login.html';
             }
         });
@@ -48,11 +54,18 @@ class NotificationsManager {
 
     async loadNotifications() {
         try {
+            console.log('🔍 Debug: Loading notifications for user:', this.currentUser.uid);
+            console.log('🔍 Debug: NotificationService available:', !!NotificationService);
+            console.log('🔍 Debug: getUserNotifications method available:', !!NotificationService.getUserNotifications);
+            
             this.notifications = await NotificationService.getUserNotifications(this.currentUser.uid);
+            console.log('📧 Debug: Loaded notifications:', this.notifications);
+            console.log('📧 Debug: Notification count:', this.notifications.length);
+            
             this.updateUnreadCount();
             this.filterNotifications();
         } catch (error) {
-            console.error('Error loading notifications:', error);
+            console.error('❌ Error loading notifications:', error);
             this.showError('Failed to load notifications');
         }
     }
@@ -453,6 +466,57 @@ class NotificationsManager {
         setTimeout(() => {
             notification.remove();
         }, 5000);
+    }
+
+    // Debug function to check notifications - call this from browser console
+    async debugCheckNotifications(userId = null) {
+        try {
+            const targetUserId = userId || this.currentUser?.uid;
+            if (!targetUserId) {
+                console.error('❌ No user ID provided');
+                return;
+            }
+
+            console.log('🔍 Debugging notifications for user:', targetUserId);
+            const notifications = await NotificationService.debugGetUserNotifications(targetUserId);
+            console.log('🎯 Debug results:', notifications);
+            return notifications;
+        } catch (error) {
+            console.error('❌ Debug check failed:', error);
+        }
+    }
+
+    // Debug function to create a test notification for current user
+    async createTestNotification() {
+        try {
+            if (!this.currentUser) {
+                console.error('❌ No current user');
+                return;
+            }
+
+            console.log('🧪 Creating test notification for current user:', this.currentUser.uid);
+            
+            const testNotification = {
+                type: 'announcement',
+                title: 'Test Notification',
+                message: 'This is a test notification to verify the notification system is working properly.',
+                recipientId: this.currentUser.uid,
+                senderId: 'system',
+                data: {
+                    isTest: true
+                }
+            };
+
+            const result = await NotificationService.createNotification(testNotification);
+            console.log('✅ Test notification created:', result);
+            
+            // Reload notifications to show the new one
+            await this.loadNotifications();
+            
+            return result;
+        } catch (error) {
+            console.error('❌ Failed to create test notification:', error);
+        }
     }
 }
 

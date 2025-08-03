@@ -297,6 +297,41 @@
     margin: 0;
 }
 
+/* Shared File Styles */
+.file-item.shared-file {
+    border-color: #4CAF50;
+    background: linear-gradient(135deg, #0a0f1a 0%, rgba(76, 175, 80, 0.05) 100%);
+}
+
+.file-item.shared-file:hover {
+    border-color: #66BB6A;
+}
+
+.file-share-indicator {
+    margin-left: 0.5rem;
+    color: #4CAF50;
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.75rem;
+}
+
+.file-share-indicator svg {
+    width: 0.875rem;
+    height: 0.875rem;
+}
+
+.file-name {
+    display: flex;
+    align-items: center;
+    color: #ccd6f6;
+    font-weight: 500;
+    font-size: 0.875rem;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Modal Styles */
 .modal {
     position: fixed;

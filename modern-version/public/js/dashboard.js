@@ -14,6 +14,11 @@ onAuthStateChanged(auth, async (user) => {
     await updateUserDisplayName(user);
     await loadDashboardData();
     initializeCalendar();
+    
+    // Force mobile layout on initial load
+    setTimeout(() => {
+      forceMobileAnnouncementLayout();
+    }, 200);
   } else {
     window.location.href = '/login.html';
   }
@@ -156,6 +161,10 @@ async function loadAnnouncements() {
     container.innerHTML = announcements.map(announcement => {
       const time = announcement.createdAt ? announcement.createdAt.toDate() : new Date();
       const isScheduled = announcement.scheduledFor && announcement.scheduledFor.toDate() > new Date();
+      const message = announcement.message || '';
+      const charLimit = 150;
+      const needsTruncation = message.length > charLimit;
+      const truncatedMessage = needsTruncation ? message.substring(0, charLimit) + '...' : message;
       
       return `
         <div class="announcement-item">
@@ -163,7 +172,12 @@ async function loadAnnouncements() {
             <h4 class="announcement-title">${announcement.title || 'Untitled'}</h4>
             ${isScheduled ? '<span class="scheduled-badge">Scheduled</span>' : ''}
           </div>
-          <p class="announcement-message">${announcement.message}</p>
+          <div class="announcement-message-container">
+            <p class="announcement-message" data-full-text="${message.replace(/"/g, '&quot;')}">${truncatedMessage}</p>
+            ${needsTruncation ? `
+              <button class="read-more-btn" onclick="toggleAnnouncementText(this)">Read More</button>
+            ` : ''}
+          </div>
           <div class="announcement-meta">
             <span class="announcement-author">By: ${announcement.authorName || 'Anonymous'}</span>
             <span class="announcement-time">${formatTimeAgo(time)}</span>
@@ -171,8 +185,50 @@ async function loadAnnouncements() {
         </div>
       `;
     }).join('');
+    
+    // Force mobile layout after DOM update
+    setTimeout(() => {
+      forceMobileAnnouncementLayout();
+    }, 100);
   } catch (error) {
     console.error('Error displaying announcements:', error);
+  }
+}
+
+// Force proper announcement layout on mobile
+function forceMobileAnnouncementLayout() {
+  const isMobile = window.innerWidth <= 768 || /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  
+  if (isMobile) {
+    const container = document.getElementById('announcementsList');
+    const announcements = document.querySelectorAll('.announcement-item');
+    
+    if (container) {
+      // Force container styles
+      container.style.display = 'flex';
+      container.style.flexDirection = 'column';
+      container.style.width = '100%';
+      container.style.maxWidth = '100%';
+      container.style.boxSizing = 'border-box';
+    }
+    
+    // Force each announcement item styles
+    announcements.forEach(item => {
+      item.style.display = 'block';
+      item.style.width = '100%';
+      item.style.maxWidth = '100%';
+      item.style.marginBottom = '1rem';
+      item.style.boxSizing = 'border-box';
+      item.style.flexShrink = '0';
+      
+      // Fix headers
+      const header = item.querySelector('.announcement-header');
+      if (header) {
+        header.style.display = 'flex';
+        header.style.flexDirection = 'column';
+        header.style.alignItems = 'flex-start';
+      }
+    });
   }
 }
 
@@ -275,3 +331,39 @@ async function loadUpcomingEvents() {
         console.error('Error loading events for calendar:', error);
     }
 }
+
+// Toggle announcement text expansion
+function toggleAnnouncementText(button) {
+    const messageElement = button.parentElement.querySelector('.announcement-message');
+    const fullText = messageElement.getAttribute('data-full-text');
+    const isExpanded = button.textContent === 'Read Less';
+    
+    if (isExpanded) {
+        // Collapse
+        const charLimit = 150;
+        const truncatedText = fullText.substring(0, charLimit) + '...';
+        messageElement.textContent = truncatedText;
+        button.textContent = 'Read More';
+    } else {
+        // Expand
+        messageElement.textContent = fullText;
+        button.textContent = 'Read Less';
+    }
+}
+
+// Make the function globally available
+window.toggleAnnouncementText = toggleAnnouncementText;
+
+// Add window resize listener for mobile layout adjustments
+window.addEventListener('resize', () => {
+  setTimeout(() => {
+    forceMobileAnnouncementLayout();
+  }, 100);
+});
+
+// Add orientation change listener for mobile devices
+window.addEventListener('orientationchange', () => {
+  setTimeout(() => {
+    forceMobileAnnouncementLayout();
+  }, 300);
+});

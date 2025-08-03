@@ -11,7 +11,9 @@ import {
   arrayUnion,
   arrayRemove,
   updateDoc,
-  getDoc
+  getDoc,
+  addDoc,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 import { initializeAuth } from '/utils/auth-utils.js';
 
@@ -233,7 +235,7 @@ document.querySelector('.forms-search input').addEventListener('input', (e) => {
         <span class="form-due">Due: ${dueDate}</span>
       </div>
       <div class="form-creator">
-        <span class="creator-name">By: ${form.creatorName || 'Unknown'}</span>
+        <span class="creator-name">By: ${form.authorName || form.creatorName || 'Unknown'}</span>
       </div>
       <div class="form-actions">
         <button class="view-form-btn" data-form-id="${doc.id}">View Form</button>
@@ -304,12 +306,11 @@ document.querySelector('.forms-search input').addEventListener('input', (e) => {
   });
 });
 
-// Add create form button navigation
+// Add this at the end of the file
 document.getElementById('createFormBtn').addEventListener('click', () => {
   window.location.href = 'create-form.html';
 });
 
-// Add this at the end of the file
 document.getElementById('viewResultsBtn').addEventListener('click', () => {
   const userForms = document.querySelectorAll('#userFormsList .form-card');
   if (userForms.length === 0) {
@@ -452,7 +453,7 @@ async function loadBookmarkedForms() {
           <span class="form-due">Due: ${dueDate}</span>
         </div>
         <div class="form-creator">
-          <span class="creator-name">By: ${form.creatorName || 'Unknown'}</span>
+          <span class="creator-name">By: ${form.authorName || form.creatorName || 'Unknown'}</span>
         </div>
         <div class="form-actions">
           <button class="view-form-btn" data-form-id="${id}">View Form</button>

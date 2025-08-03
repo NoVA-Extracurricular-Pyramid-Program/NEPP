@@ -1,5 +1,5 @@
 {
-  "name": "nepp-feedback-functions",
+  "name": "nepp-firebase-app",
   "description": "Firebase Cloud Functions for NEPP feedback email notifications",
   "version": "1.0.0",
   "main": "index.js",
@@ -9,7 +9,14 @@
     "nodemailer": "^6.9.0"
   },
   "engines": {
-    "node": "22"
+    "node": "18"
+  },
+    "scripts": {
+    "serve": "firebase serve --host localhost --port 5000",
+    "deploy": "firebase deploy",
+    "deploy:hosting": "firebase deploy --only hosting",
+    "deploy:rules": "firebase deploy --only firestore:rules,storage",
+    "deploy:production": "firebase use nepp-82074 && firebase deploy",
+    "deploy:test": "firebase use nepp-test-server && firebase deploy"
   }
 }
-

@@ -125,6 +125,9 @@ function displaySummary() {
       case 'Multiple Choice':
         summaryHTML += generateMultipleChoiceSummary(question, questionResponses);
         break;
+      case 'Poll':
+        summaryHTML += generateMultipleChoiceSummary(question, questionResponses);
+        break;
       case 'Checkboxes':
         summaryHTML += generateCheckboxesSummary(question, questionResponses);
         break;

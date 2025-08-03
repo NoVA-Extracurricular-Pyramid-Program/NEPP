@@ -73,6 +73,20 @@
             <div id="shareModal" class="modal share-modal" style="display: none;">
                 <div class="modal-content">
                     <h3>Share Files</h3>
+                    
+                    <div class="share-info-banner" style="
+                        background: rgba(255, 214, 0, 0.1); 
+                        border: 1px solid rgba(255, 214, 0, 0.3); 
+                        padding: 1rem; 
+                        border-radius: 6px; 
+                        margin-bottom: 1.5rem;
+                        font-size: 0.9rem;
+                        color: #FFD600;
+                    ">
+                        <strong>Note:</strong> Users must have a NEPP account and be logged in to receive shared files. 
+                        They'll get a notification when you share files with them.
+                    </div>
+                    
                     <div class="share-options">
                         <div class="form-group">
                             <label for="shareType">Share with:</label>
@@ -125,6 +139,7 @@
     <input type="file" id="fileInput" multiple style="display: none;">
     
     <script type="module" src="/config/firebase-config.js"></script>
+    <script type="module" src="/utils/security-init.js"></script>
     <script type="module" src="/components/sidebar.js"></script>
     <script type="module" src="/services/auth-service.js"></script>
     <script type="module" src="/services/resources-service.js"></script>

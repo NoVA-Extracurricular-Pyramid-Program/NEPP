@@ -28,17 +28,24 @@ class ResourcesService {
     // Upload file to Firebase Storage and save metadata to Firestore
     async uploadFile(file, userId, onProgress = null) {
         try {
+            console.log('🔍 Debug: Starting file upload...');
+            
             // Basic authentication check
             if (!auth.currentUser) {
+                console.error('❌ No authenticated user found');
                 throw new Error('User must be authenticated to upload files');
             }
 
             if (auth.currentUser.uid !== userId) {
+                console.error('❌ User ID mismatch');
                 throw new Error('User ID mismatch - cannot upload files for another user');
             }
 
+            console.log('✅ Authentication verified for user:', userId);
+
             // Force fresh token - this is critical for Firebase Storage authentication
             await auth.currentUser.getIdToken(true);
+            console.log('✅ Fresh authentication token obtained');
             
             // Important: Wait for Firebase Storage to recognize the auth state
             // This delay is crucial for storage authentication to work properly
@@ -54,9 +61,13 @@ class ResourcesService {
             const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
             const fileName = `${timestamp}_${sanitizedFileName}`;
             const filePath = `resources/${userId}/${fileName}`;
+            
+            console.log('📁 Upload path:', filePath);
 
             // Create storage reference
             const storageRef = ref(storage, filePath);
+            
+            console.log('🚀 Attempting upload to Firebase Storage...');
             
             // Use uploadBytesResumable for better progress tracking
             const uploadTask = uploadBytesResumable(storageRef, file);
@@ -66,15 +77,17 @@ class ResourcesService {
                 uploadTask.on('state_changed',
                     (snapshot) => {
                         const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                        console.log(`Upload is ${progress}% done`);
                         if (onProgress) {
                             onProgress(progress);
                         }
                     },
                     (error) => {
-                        console.error('Upload failed:', error);
+                        console.error('❌ Upload failed:', error);
                         reject(error);
                     },
                     () => {
+                        console.log('✅ Upload completed successfully');
                         resolve(uploadTask.snapshot);
                     }
                 );
@@ -148,150 +161,46 @@ class ResourcesService {
     // Get files shared with user
     async getUserFilesWithShared(userId, userGroups = []) {
         try {
-            console.log('🔍 Fetching files for user:', userId, 'with groups:', userGroups);
+            const queries = [];
             
-            // First, get user's own files
-            const ownFilesQuery = query(
-                collection(db, this.collectionName),
-                where('userId', '==', userId),
-                orderBy('uploadedAt', 'desc')
-            );
-            
-            console.log('📁 Debug: Executing own files query...');
-            const ownFilesSnapshot = await getDocs(ownFilesQuery);
-            const files = [];
-            
-            ownFilesSnapshot.forEach(doc => {
-                const data = doc.data();
-                files.push({
-                    id: doc.id,
-                    ...data,
-                    uploadedAt: data.uploadedAt?.toDate() || new Date(),
-                    isOwned: true
-                });
-            });
-            
-            console.log(`📁 Found ${files.length} owned files`);
-            
-            // Now get shared files using a different approach
-            await this.addSharedFilesToList(files, userId, userGroups);
-            
-            // Sort by upload date (most recent first)
-            files.sort((a, b) => b.uploadedAt - a.uploadedAt);
-            
-            console.log(` Total files returned: ${files.length}`);
-            return files;
-        } catch (error) {
-            console.error(' Error fetching user files:', error);
-            // Fallback: try to get at least the user's own files
-            try {
-                console.log('🔄 Fallback: Getting only owned files...');
-                const fallbackQuery = query(
+            // User's own files
+            queries.push(
+                query(
                     collection(db, this.collectionName),
                     where('userId', '==', userId),
                     orderBy('uploadedAt', 'desc')
-                );
-                
-                const fallbackSnapshot = await getDocs(fallbackQuery);
-                const fallbackFiles = [];
-                
-                fallbackSnapshot.forEach(doc => {
+                )
+            );
+            
+            // Files shared directly with user
+            queries.push(
+                query(
+                    collection(db, this.collectionName),
+                    where('sharedWith', 'array-contains', userId),
+                    orderBy('uploadedAt', 'desc')
+                )
+            );
+
+            const queryPromises = queries.map(q => getDocs(q));
+            const querySnapshots = await Promise.all(queryPromises);
+            
+            const allFiles = new Map();
+            
+            querySnapshots.forEach(snapshot => {
+                snapshot.forEach(doc => {
                     const data = doc.data();
-                    fallbackFiles.push({
+                    allFiles.set(doc.id, {
                         id: doc.id,
                         ...data,
-                        uploadedAt: data.uploadedAt?.toDate() || new Date(),
-                        isOwned: true
+                        uploadedAt: data.uploadedAt?.toDate() || new Date()
                     });
                 });
-                
-                console.log(` Fallback: Found ${fallbackFiles.length} owned files`);
-                return fallbackFiles;
-            } catch (fallbackError) {
-                console.error(' Fallback also failed:', fallbackError);
-                return [];
-            }
-        }
-    }
-
-    // Helper method to add shared files to the list
-    async addSharedFilesToList(files, userId, userGroups = []) {
-        try {
-            console.log(' Loading shared files - NEW VERSION...');
-            let sharedCount = 0;
+            });
             
-            // Get ALL shared files and filter client-side (same pattern as forms service)
-            try {
-                console.log(' Debug: Querying all shared files...');
-                const sharedQuery = query(
-                    collection(db, this.collectionName),
-                    where('isShared', '==', true)
-                );
-                
-                const sharedSnapshot = await getDocs(sharedQuery);
-                console.log(` Found ${sharedSnapshot.size} total shared files`);
-                
-                sharedSnapshot.forEach(doc => {
-                    const data = doc.data();
-                    const fileId = doc.id;
-                    
-                    // Skip if already in the list (user's own file)
-                    if (files.find(f => f.id === fileId)) {
-                        return;
-                    }
-                    
-                    // Client-side filtering based on sharing logic
-                    let shouldInclude = false;
-                    let shareInfo = { isOwned: false };
-                    
-                    // Check if file is public
-                    if (data.shareType === 'public') {
-                        shouldInclude = true;
-                        shareInfo = { ...shareInfo, isPublic: true, shareType: 'public' };
-                    }
-                    
-                    // Check if file is shared specifically with this user
-                    if (data.shareType === 'specific' && 
-                        data.sharedWith && 
-                        Array.isArray(data.sharedWith) && 
-                        data.sharedWith.includes(userId)) {
-                        shouldInclude = true;
-                        shareInfo = { ...shareInfo, isSharedWithMe: true, shareType: 'specific' };
-                    }
-                    
-                    // Check if file is shared with user's groups
-                    if (data.shareType === 'group' && 
-                        data.groupId && 
-                        userGroups.includes(data.groupId)) {
-                        shouldInclude = true;
-                        shareInfo = { 
-                            ...shareInfo, 
-                            isSharedWithGroup: true, 
-                            shareType: 'group',
-                            sharedGroupId: data.groupId 
-                        };
-                    }
-                    
-                    if (shouldInclude) {
-                        files.push({
-                            id: fileId,
-                            ...data,
-                            uploadedAt: data.uploadedAt?.toDate() || new Date(),
-                            ...shareInfo
-                        });
-                        sharedCount++;
-                        console.log(`✅ Added shared file: ${data.name} (${data.shareType})`);
-                    }
-                });
-                
-                console.log(`📁 Total shared files added: ${sharedCount}`);
-                
-            } catch (sharedError) {
-                console.warn('⚠️ Could not fetch shared files:', sharedError.message);
-            }
-            
+            return Array.from(allFiles.values()).sort((a, b) => b.uploadedAt - a.uploadedAt);
         } catch (error) {
-            console.warn('⚠️ Error fetching shared files (continuing with owned files only):', error);
+            console.error('Error fetching user files with shared:', error);
+            return [];
         }
     }
 
@@ -304,61 +213,6 @@ class ResourcesService {
             return true;
         } catch (error) {
             console.error('Error deleting file:', error);
-            throw error;
-        }
-    }
-
-    // Share file with users or groups
-    async shareFile(fileId, shareData, userId) {
-        try {
-            // Get the file document
-            const fileDoc = await getDoc(doc(db, this.collectionName, fileId));
-            
-            if (!fileDoc.exists()) {
-                throw new Error('File not found');
-            }
-
-            const fileData = fileDoc.data();
-            
-            // Verify the user owns this file
-            if (fileData.userId !== userId) {
-                throw new Error('You can only share files you own');
-            }
-
-            // Prepare update data based on share type
-            const updateData = {
-                lastModified: serverTimestamp(),
-                lastShared: serverTimestamp()
-            };
-
-            if (shareData.type === 'public') {
-                updateData.isShared = true;
-                updateData.shareType = 'public';
-                if (shareData.description) {
-                    updateData.shareDescription = shareData.description;
-                }
-            } else if (shareData.type === 'group') {
-                updateData.groupId = shareData.groupId;
-                updateData.shareType = 'group';
-                updateData.isShared = true;
-                if (shareData.description) {
-                    updateData.shareDescription = shareData.description;
-                }
-            } else if (shareData.type === 'specific') {
-                updateData.sharedWith = shareData.userIds;
-                updateData.shareType = 'specific';
-                updateData.isShared = true;
-                if (shareData.description) {
-                    updateData.shareDescription = shareData.description;
-                }
-            }
-
-            // Update the file document
-            await updateDoc(doc(db, this.collectionName, fileId), updateData);
-            
-            return true;
-        } catch (error) {
-            console.error('Error sharing file:', error);
             throw error;
         }
     }
@@ -460,32 +314,6 @@ class ResourcesService {
         }
 
         return true;
-    }
-
-    // Debug function to check shared files in database
-    async debugSharedFiles() {
-        try {
-            console.log('🔍 Debug: Checking all resources with isShared=true...');
-            const sharedQuery = query(
-                collection(db, this.collectionName),
-                where('isShared', '==', true)
-            );
-            
-            const snapshot = await getDocs(sharedQuery);
-            console.log(`📁 Found ${snapshot.size} shared files total`);
-            
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                console.log(`📄 File: ${data.name}, ShareType: ${data.shareType}, Owner: ${data.userId}`);
-                if (data.shareType === 'specific') {
-                    console.log(`   SharedWith: ${JSON.stringify(data.sharedWith)}`);
-                } else if (data.shareType === 'group') {
-                    console.log(`   GroupId: ${data.groupId}`);
-                }
-            });
-        } catch (error) {
-            console.error('❌ Debug query failed:', error);
-        }
     }
 }
 

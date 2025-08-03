@@ -9,7 +9,8 @@ import {
     where, 
     orderBy,
     serverTimestamp,
-    getDoc 
+    getDoc,
+    setDoc
 } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js';
 import { db, auth } from '/config/firebase-config.js';
 
@@ -21,6 +22,12 @@ class NotificationService {
     // Create a new notification using subcollection approach
     async createNotification(notificationData) {
         try {
+            console.log(`🔔 Creating notification for user: ${notificationData.recipientId}`);
+            console.log('Notification data:', notificationData);
+            
+            // Ensure the user document exists before creating subcollection
+            await this.ensureUserDocumentExists(notificationData.recipientId);
+            
             const notification = {
                 type: notificationData.type, // 'co-owner-invite', 'file-shared', 'announcement', etc.
                 title: notificationData.title,
@@ -33,7 +40,12 @@ class NotificationService {
 
             // Use subcollection: users/{recipientId}/notifications
             const userNotificationsRef = collection(db, 'users', notificationData.recipientId, 'notifications');
+            console.log(`📝 Adding notification to: users/${notificationData.recipientId}/notifications`);
+            
             const docRef = await addDoc(userNotificationsRef, notification);
+            
+            console.log(`✅ Notification created successfully with ID: ${docRef.id}`);
+            console.log(`   Type: ${notification.type} for user ${notificationData.recipientId}`);
             
             return {
                 id: docRef.id,
@@ -43,6 +55,67 @@ class NotificationService {
         } catch (error) {
             console.error('Error creating notification:', error);
             throw error;
+        }
+    }
+
+    // Ensure user document exists before creating subcollection notifications
+    async ensureUserDocumentExists(userId) {
+        try {
+            console.log(`🔍 Checking if user document exists for: ${userId}`);
+            const userRef = doc(db, 'users', userId);
+            const userDoc = await getDoc(userRef);
+            
+            if (!userDoc.exists()) {
+                console.log(`📝 Creating user document for: ${userId}`);
+                await setDoc(userRef, {
+                    id: userId,
+                    createdAt: new Date(),
+                    notificationCount: 0
+                });
+                console.log(`✅ User document created for: ${userId}`);
+            } else {
+                console.log(`✅ User document already exists for: ${userId}`);
+            }
+        } catch (error) {
+            console.error(`❌ Error ensuring user document exists for ${userId}:`, error);
+            throw error;
+        }
+    }
+
+    // Debug function to check if notifications exist for a user
+    async debugGetUserNotifications(userId) {
+        try {
+            console.log(`🔍 Debug: Checking notifications for user ${userId}`);
+            
+            // Check if user document exists
+            const userRef = doc(db, 'users', userId);
+            const userDoc = await getDoc(userRef);
+            console.log(`📄 User document exists: ${userDoc.exists()}`);
+            
+            if (userDoc.exists()) {
+                console.log(`📋 User document data:`, userDoc.data());
+            }
+            
+            // Query the user's notification subcollection
+            const userNotificationsRef = collection(db, 'users', userId, 'notifications');
+            const snapshot = await getDocs(userNotificationsRef);
+            
+            console.log(`📧 Found ${snapshot.size} notifications in subcollection`);
+            
+            const notifications = [];
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                notifications.push({
+                    id: doc.id,
+                    ...data
+                });
+                console.log(`📩 Notification ${doc.id}:`, data);
+            });
+            
+            return notifications;
+        } catch (error) {
+            console.error('❌ Debug error:', error);
+            return [];
         }
     }
 

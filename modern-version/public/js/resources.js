@@ -1,10 +1,14 @@
 import ResourcesService from '/services/resources-service.js';
 import authManager from '/utils/auth-manager.js';
-import { db } from '/config/firebase-config.js';
+import NotificationService from '/services/notification-service.js';
+import { auth, db } from '/config/firebase-config.js';
 import { 
     collection, 
-    getDocs 
+    getDocs,
+    getDoc,
+    doc
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+import { initializeAuth } from '/utils/auth-utils.js';
 
 class ResourcesManager {
     constructor() {
@@ -16,7 +20,38 @@ class ResourcesManager {
         
         this.initializeElements();
         this.bindEvents();
-        this.setupAuthListener();
+        this.initializeAuthentication();
+    }
+
+    async initializeAuthentication() {
+        try {
+            const authResult = await initializeAuth(false); // Don't redirect to login automatically
+            if (authResult && authResult.user) {
+                this.currentUser = authResult.user;
+                console.log('✅ Authentication initialized successfully:', this.currentUser.uid);
+                
+                // Enable upload functionality
+                this.updateUIForAuthenticatedUser();
+                
+                // Load user files
+                await this.loadFiles();
+                
+                // Check for resource parameter in URL (for notifications)
+                this.checkForResourceParameter();
+            } else {
+                this.currentUser = null;
+                console.log('⚠️ No authenticated user found');
+                
+                // Disable upload functionality and show auth alert
+                this.updateUIForUnauthenticatedUser();
+                this.showAuthAlert();
+            }
+        } catch (error) {
+            console.error('❌ Authentication initialization failed:', error);
+            this.currentUser = null;
+            this.updateUIForUnauthenticatedUser();
+            this.showAuthAlert();
+        }
     }
 
     initializeElements() {
@@ -75,6 +110,11 @@ class ResourcesManager {
         // Upload button
         if (this.uploadBtn) {
             this.uploadBtn.addEventListener('click', () => {
+                if (!this.currentUser) {
+                    this.showError('Please log in to upload files');
+                    this.showAuthAlert();
+                    return;
+                }
                 this.fileInput.click();
             });
         }
@@ -89,12 +129,19 @@ class ResourcesManager {
         // Drag and drop
         if (this.dropZone) {
             this.dropZone.addEventListener('click', () => {
+                if (!this.currentUser) {
+                    this.showError('Please log in to upload files');
+                    this.showAuthAlert();
+                    return;
+                }
                 this.fileInput.click();
             });
 
             this.dropZone.addEventListener('dragover', (e) => {
                 e.preventDefault();
-                this.dropZone.classList.add('drag-over');
+                if (this.currentUser) {
+                    this.dropZone.classList.add('drag-over');
+                }
             });
 
             this.dropZone.addEventListener('dragleave', (e) => {
@@ -105,6 +152,11 @@ class ResourcesManager {
             this.dropZone.addEventListener('drop', (e) => {
                 e.preventDefault();
                 this.dropZone.classList.remove('drag-over');
+                if (!this.currentUser) {
+                    this.showError('Please log in to upload files');
+                    this.showAuthAlert();
+                    return;
+                }
                 const files = Array.from(e.dataTransfer.files);
                 this.handleFileSelection(files);
             });
@@ -146,21 +198,37 @@ class ResourcesManager {
         });
     }
 
-    setupAuthListener() {
-        // Subscribe to global auth state changes
-        authManager.onAuthStateChanged(async (user) => {
-            if (user) {
-                this.currentUser = user;
-                
-                // Load user files
-                await this.loadFiles();
-                
-                // Check for resource parameter in URL (for notifications)
-                this.checkForResourceParameter();
-            } else {
-                this.showAuthAlert();
-            }
-        });
+    updateUIForAuthenticatedUser() {
+        // Enable upload button and drop zone
+        if (this.uploadBtn) {
+            this.uploadBtn.disabled = false;
+            this.uploadBtn.style.opacity = '1';
+            this.uploadBtn.style.cursor = 'pointer';
+        }
+        
+        if (this.dropZone) {
+            this.dropZone.style.opacity = '1';
+            this.dropZone.style.cursor = 'pointer';
+        }
+    }
+
+    updateUIForUnauthenticatedUser() {
+        // Disable upload button and drop zone
+        if (this.uploadBtn) {
+            this.uploadBtn.disabled = true;
+            this.uploadBtn.style.opacity = '0.5';
+            this.uploadBtn.style.cursor = 'not-allowed';
+        }
+        
+        if (this.dropZone) {
+            this.dropZone.style.opacity = '0.5';
+            this.dropZone.style.cursor = 'not-allowed';
+        }
+        
+        // Clear files list
+        if (this.filesList) {
+            this.filesList.innerHTML = '';
+        }
     }
 
     checkForResourceParameter() {
@@ -191,12 +259,72 @@ class ResourcesManager {
     }
 
     showAuthAlert() {
-        alert('Please log in to access your resources.');
-        window.location.href = 'login.html';
+        // Show a more informative message about authentication
+        const authMessage = `
+            <div style="
+                position: fixed; 
+                top: 0; left: 0; 
+                width: 100%; height: 100%; 
+                background: rgba(0,0,0,0.8); 
+                display: flex; 
+                align-items: center; 
+                justify-content: center; 
+                z-index: 10000;
+                color: white;
+                font-family: Arial, sans-serif;
+            ">
+                <div style="
+                    background: #1a2436; 
+                    padding: 2rem; 
+                    border-radius: 12px; 
+                    text-align: center;
+                    max-width: 400px;
+                    border: 1px solid #334a66;
+                ">
+                    <h2 style="color: #FFD600; margin-bottom: 1rem;">Authentication Required</h2>
+                    <p style="margin-bottom: 1.5rem; line-height: 1.5;">
+                        You need to create an account and log in to access NEPP resources. 
+                        This includes uploading, downloading, and sharing files.
+                    </p>
+                    <div style="display: flex; gap: 1rem; justify-content: center;">
+                        <button onclick="window.location.href='login.html'" style="
+                            background: #FFD600; 
+                            color: #1a2436; 
+                            border: none; 
+                            padding: 0.75rem 1.5rem; 
+                            border-radius: 6px; 
+                            cursor: pointer;
+                            font-weight: bold;
+                        ">
+                            Login
+                        </button>
+                        <button onclick="window.location.href='signup.html'" style="
+                            background: transparent; 
+                            color: #FFD600; 
+                            border: 2px solid #FFD600; 
+                            padding: 0.75rem 1.5rem; 
+                            border-radius: 6px; 
+                            cursor: pointer;
+                        ">
+                            Sign Up
+                        </button>
+                    </div>
+                    <p style="margin-top: 1rem; font-size: 0.9rem; color: #ccc;">
+                        Don't have an account? Click "Sign Up" to create one.
+                    </p>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', authMessage);
     }
 
     async loadFiles() {
         try {
+            console.log('🔍 Debug: Loading files for user:', this.currentUser.uid);
+            
+            // Debug: Check what shared files exist in the database
+            await ResourcesService.debugSharedFiles();
+            
             // Get user's groups first
             const { getDocs, query, where, collection } = await import('https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js');
             const { db } = await import('/config/firebase-config.js');
@@ -208,13 +336,18 @@ class ResourcesManager {
             
             const groupsSnapshot = await getDocs(groupsQuery);
             const userGroups = groupsSnapshot.docs.map(doc => doc.id);
+            console.log('📁 Debug: User groups:', userGroups);
             
             // Load files including shared ones
+            console.log('📁 Debug: Calling ResourcesService.getUserFilesWithShared...');
             this.files = await ResourcesService.getUserFilesWithShared(this.currentUser.uid, userGroups);
+            console.log('📁 Debug: Files loaded:', this.files);
+            console.log('📁 Debug: File count:', this.files.length);
+            
             this.filteredFiles = [...this.files];
             this.renderFiles();
         } catch (error) {
-            console.error('Error loading files:', error);
+            console.error('❌ Error loading files:', error);
             this.showError('Failed to load files');
         }
     }
@@ -271,9 +404,19 @@ class ResourcesManager {
             const extension = ResourcesService.getFileExtension(file.name);
             const size = ResourcesService.formatFileSize(file.size);
             const date = ResourcesService.formatDate(file.uploadedAt);
+            
+            // Check if this is a shared file (not owned by current user)
+            const isSharedFile = file.userId !== this.currentUser?.uid;
+            const shareIndicator = isSharedFile ? `
+                <div class="file-share-indicator" title="Shared with you">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314a2.25 2.25 0 1 1 .434 2.44L7.217 13.747m0-2.186 9.566 5.314m-9.566-5.314L7.217 13.747M10.5 12a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+                    </svg>
+                </div>
+            ` : '';
 
             return `
-                <div class="file-item" data-file-id="${file.id}">
+                <div class="file-item ${isSharedFile ? 'shared-file' : ''}" data-file-id="${file.id}">
                     <div class="file-actions">
                         <button class="file-action-btn" onclick="resourcesManager.previewFile('${file.id}')" title="Preview">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -281,21 +424,21 @@ class ResourcesManager {
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                             </svg>
                         </button>
-                        <button class="file-action-btn" onclick="resourcesManager.showShareModal('${file.id}')" title="Share">
+                        ${!isSharedFile ? `<button class="file-action-btn" onclick="resourcesManager.showShareModal('${file.id}')" title="Share">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314a2.25 2.25 0 1 1 .434 2.44L7.217 13.747m0-2.186 9.566 5.314m-9.566-5.314L7.217 13.747M10.5 12a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
                             </svg>
-                        </button>
+                        </button>` : ''}
                         <button class="file-action-btn" onclick="resourcesManager.downloadFile('${file.id}')" title="Download">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
                             </svg>
                         </button>
-                        <button class="file-action-btn" onclick="resourcesManager.deleteFile('${file.id}', '${file.storagePath}')" title="Delete">
+                        ${!isSharedFile ? `<button class="file-action-btn" onclick="resourcesManager.deleteFile('${file.id}', '${file.storagePath}')" title="Delete">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
                             </svg>
-                        </button>
+                        </button>` : ''}
                     </div>
                     <div class="file-item-header">
                         <div class="file-icon ${category}">
@@ -303,6 +446,7 @@ class ResourcesManager {
                         </div>
                         <div class="file-name" title="${file.name}">
                             ${file.name}
+                            ${shareIndicator}
                         </div>
                     </div>
                     <div class="file-info">
@@ -329,6 +473,18 @@ class ResourcesManager {
     async handleFileSelection(files) {
         if (!files || files.length === 0) return;
 
+        console.log('🔍 Debug: Starting file selection process...');
+
+        // Simple authentication check using the same pattern as forms
+        if (!this.currentUser || !auth.currentUser) {
+            console.error('❌ No authenticated user');
+            this.showError('Please log in to upload files');
+            this.showAuthAlert();
+            return;
+        }
+
+        console.log('✅ User authenticated:', this.currentUser.uid);
+
         // Validate files
         const validFiles = [];
         for (const file of files) {
@@ -343,7 +499,7 @@ class ResourcesManager {
         if (validFiles.length === 0) return;
 
         try {
-            // First upload the files and get their IDs
+            // Upload the files and get their IDs
             const uploadedFileIds = await this.uploadFiles(validFiles);
             
             if (uploadedFileIds && uploadedFileIds.length > 0) {
@@ -777,6 +933,9 @@ class ResourcesManager {
                 await ResourcesService.shareFile(fileId, shareData, this.currentUser.uid);
             }
 
+            // Send notifications to recipients
+            await this.sendSharingNotifications(filesToShare, shareData);
+
             this.showSuccess(`Successfully shared ${filesToShare.length} file(s)`);
             this.hideShareModal();
             
@@ -852,6 +1011,121 @@ class ResourcesManager {
             progressStatus.textContent = 'Failed';
             progressItem.classList.add('error');
             throw error;
+        }
+    }
+
+    // Send notifications when files are shared
+    async sendSharingNotifications(filesToShare, shareData) {
+        try {
+            console.log(' Starting to send sharing notifications...');
+            console.log('Files to share:', filesToShare);
+            console.log('Share data:', shareData);
+            
+            // Get the current user's display name
+            const senderName = this.currentUser.displayName || this.currentUser.email || 'Someone';
+            console.log('Sender name:', senderName);
+            
+            // Get recipient IDs based on share type
+            const recipientIds = await this.getShareRecipients(shareData);
+            console.log('Recipients found:', recipientIds);
+            
+            if (recipientIds.length === 0) {
+                console.log('No recipients to notify for file sharing');
+                return;
+            }
+
+            // Send notifications for each shared file
+            for (const fileId of filesToShare) {
+                console.log(`Processing file ${fileId} for notifications...`);
+                
+                // Get file details
+                const file = this.files.find(f => f.id === fileId);
+                if (!file) {
+                    console.warn(`File ${fileId} not found in local files list`);
+                    continue;
+                }
+
+                console.log(`File found: ${file.name}`);
+
+                // Send notification to each recipient
+                for (const recipientId of recipientIds) {
+                    // Don't notify the sender
+                    if (recipientId === this.currentUser.uid) {
+                        console.log(`Skipping notification to sender (${recipientId})`);
+                        continue;
+                    }
+
+                    console.log(`🔔 Attempting to send notification to ${recipientId} for file ${file.name}`);
+                    
+                    try {
+                        const result = await NotificationService.createFileShareNotification(
+                            fileId,
+                            file.name,
+                            this.currentUser.uid,
+                            senderName,
+                            recipientId
+                        );
+                        console.log(`✅ Notification sent successfully:`, result);
+                    } catch (notificationError) {
+                        console.error(`❌ Failed to send notification to ${recipientId}:`, notificationError);
+                    }
+                }
+            }
+
+            console.log(` Completed sending notifications to ${recipientIds.length} recipients for ${filesToShare.length} files`);
+        } catch (error) {
+            console.error('❌ Error sending sharing notifications:', error);
+            // Don't fail the sharing process if notifications fail
+        }
+    }
+
+    // Get recipient IDs based on share data
+    async getShareRecipients(shareData) {
+        try {
+            console.log(' Getting share recipients for:', shareData);
+            let recipientIds = [];
+
+            if (shareData.type === 'specific' && shareData.userIds) {
+                recipientIds = shareData.userIds;
+                console.log('Specific users sharing:', recipientIds);
+            } else if (shareData.type === 'group' && shareData.groupId) {
+                console.log('Getting group members for group:', shareData.groupId);
+                // Get group members
+                const groupDoc = await getDoc(doc(db, 'groups', shareData.groupId));
+                if (groupDoc.exists()) {
+                    const groupData = groupDoc.data();
+                    recipientIds = groupData.members || [];
+                    console.log(' Group members found:', recipientIds);
+                } else {
+                    console.warn(' Group not found:', shareData.groupId);
+                }
+            } else if (shareData.type === 'public') {
+                // For public shares, we might not want to notify everyone
+                // Or we could get all users in certain groups, etc.
+                // For now, let's skip notifications for public shares
+                recipientIds = [];
+                console.log('ℹ Public sharing - no notifications sent');
+            } else {
+                console.warn('⚠️ Unknown share type or missing data:', shareData);
+            }
+
+            console.log(' Final recipient list:', recipientIds);
+            return recipientIds;
+        } catch (error) {
+            console.error('❌ Error getting share recipients:', error);
+            return [];
+        }
+    }
+
+    // Debug function to check notifications - call this from browser console
+    async debugCheckNotifications(userId) {
+        try {
+            console.log('🔍 Debugging notifications for user:', userId);
+            const notifications = await NotificationService.debugGetUserNotifications(userId);
+            console.log('🎯 Debug results:', notifications);
+            return notifications;
+        } catch (error) {
+            console.error('❌ Debug check failed:', error);
         }
     }
 }

@@ -17,9 +17,20 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
+
+// Initialize services with explicit app reference
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 const analytics = getAnalytics(app);
+
+// Wait for authentication to be ready before using storage
+auth.onAuthStateChanged((user) => {
+    if (user) {
+        console.log('Firebase Auth state changed - user authenticated:', user.uid);
+    } else {
+        console.log('Firebase Auth state changed - user signed out');
+    }
+});
 
 export { app, auth, db, storage, analytics };

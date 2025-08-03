@@ -802,22 +802,12 @@ class AnnouncementsManager {
 
   async toggleLike(announcementId, button) {
     try {
-      if (!this.currentUser) {
-        this.showError('You must be logged in to like announcements');
-        return;
-      }
-
-      // Prevent multiple rapid clicks
-      if (button.disabled) return;
-      button.disabled = true;
+      if (!this.currentUser) return;
 
       const announcementRef = doc(db, 'announcements', announcementId);
       const announcementDoc = await getDoc(announcementRef);
       
-      if (!announcementDoc.exists()) {
-        this.showError('Announcement not found');
-        return;
-      }
+      if (!announcementDoc.exists()) return;
 
       const data = announcementDoc.data();
       const likes = data.likes || [];
@@ -829,23 +819,25 @@ class AnnouncementsManager {
         // Remove like
         newLikes = likes.filter(uid => uid !== this.currentUser.uid);
         newLikeCount = Math.max(0, likeCount - 1);
+        button.classList.remove('liked');
       } else {
         // Add like
         newLikes = [...likes, this.currentUser.uid];
         newLikeCount = likeCount + 1;
+        button.classList.add('liked');
       }
 
-      // Update Firestore with optimistic UI update
-      button.classList.toggle('liked', !userLiked);
-      const countElement = button.querySelector('.like-count');
-      if (countElement) {
-        countElement.textContent = newLikeCount;
-      }
-
+      // Update Firestore
       await updateDoc(announcementRef, {
         likes: newLikes,
         likeCount: newLikeCount
       });
+
+      // Update UI
+      const countElement = button.querySelector('.like-count');
+      if (countElement) {
+        countElement.textContent = newLikeCount;
+      }
 
       // Update the local announcements array
       const announcementIndex = this.announcements.findIndex(a => a.id === announcementId);
@@ -856,24 +848,7 @@ class AnnouncementsManager {
 
     } catch (error) {
       console.error('Error toggling like:', error);
-      
-      // Revert UI changes on error
-      const announcement = this.announcements.find(a => a.id === announcementId);
-      if (announcement) {
-        const userLiked = announcement.likes && announcement.likes.includes(this.currentUser.uid);
-        button.classList.toggle('liked', userLiked);
-        const countElement = button.querySelector('.like-count');
-        if (countElement) {
-          countElement.textContent = announcement.likeCount || 0;
-        }
-      }
-      
-      this.showError('Failed to update like. Please try again.');
-    } finally {
-      // Re-enable button
-      if (button) {
-        button.disabled = false;
-      }
+      this.showError('Failed to update like');
     }
   }
 
