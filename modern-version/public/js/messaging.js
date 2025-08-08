@@ -4,6 +4,8 @@ import MessagingService from '/services/messaging-service.js';
 let currentUser = null;
 let currentTeamId = null;
 let currentChatId = null;
+let currentChatName = '';
+let currentTeamMembers = [];
 let unsubscribeMessages = null;
 let unsubscribeTyping = null;
 
@@ -29,37 +31,42 @@ async function selectTeam(teamId, element) {
   currentTeamId = teamId;
   [...document.querySelectorAll('#team-list li')].forEach(li => li.classList.remove('active'));
   if (element) element.classList.add('active');
+  currentTeamMembers = await MessagingService.getTeamMembers(teamId);
   const chats = await MessagingService.getTeamChats(teamId);
   const list = document.getElementById('chat-list');
   list.innerHTML = '';
-  chats.forEach(chat => {
-    const li = document.createElement('li');
-    li.textContent = chat.name;
-    li.addEventListener('click', () => selectChat(chat.id, li));
-    list.appendChild(li);
-  });
+  currentTeamMembers
+    .filter(m => m.id !== currentUser.uid)
+    .forEach(member => {
+      const li = document.createElement('li');
+      li.textContent = member.displayName || member.email || member.id;
+      li.addEventListener('click', () => selectUser(member, li));
+      list.appendChild(li);
+    });
+  chats
+    .filter(c => c.members && c.members.length > 2)
+    .forEach(chat => {
+      const li = document.createElement('li');
+      li.textContent = chat.name;
+      li.addEventListener('click', () => selectChat(chat.id, li, chat.name));
+      list.appendChild(li);
+    });
   const btn = document.createElement('button');
-  btn.textContent = '+ New Chat';
+  btn.textContent = '+ Create Group';
   btn.classList.add('create-chat');
-  btn.addEventListener('click', async () => {
-    const name = prompt('Chat name');
-    if (!name) return;
-    const membersInput = prompt('Enter member IDs separated by commas or leave blank for all team members');
-    let members;
-    if (membersInput && membersInput.trim()) {
-      members = membersInput.split(',').map(s => s.trim());
-    } else {
-      const team = await MessagingService.getTeam(teamId);
-      members = team.members || [];
-    }
-    await MessagingService.createChat(teamId, { name, members });
-    selectTeam(teamId);
-  });
+  btn.addEventListener('click', openGroupModal);
   list.appendChild(btn);
 }
 
-function selectChat(chatId, element) {
+async function selectUser(member, element) {
+  const chat = await MessagingService.getOrCreateDirectChat(currentTeamId, currentUser.uid, member.id);
+  selectChat(chat.id, element, member.displayName || member.email || member.id);
+}
+
+function selectChat(chatId, element, name) {
   currentChatId = chatId;
+  currentChatName = name || '';
+  document.getElementById('chat-title').textContent = currentChatName;
   [...document.querySelectorAll('#chat-list li')].forEach(li => li.classList.remove('active'));
   if (element) element.classList.add('active');
   subscribeMessages();
@@ -160,3 +167,35 @@ input.addEventListener('input', () => {
 function formatReactions(reactions = {}) {
   return Object.entries(reactions).map(([emoji, users]) => `${emoji} ${users.length}`).join(' ');
 }
+
+function openGroupModal() {
+  const modal = document.getElementById('group-modal');
+  document.getElementById('group-name').value = '';
+  const membersDiv = document.getElementById('group-members');
+  membersDiv.innerHTML = '';
+  currentTeamMembers
+    .filter(m => m.id !== currentUser.uid)
+    .forEach(member => {
+      const label = document.createElement('label');
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = member.id;
+      label.appendChild(checkbox);
+      label.appendChild(document.createTextNode(member.displayName || member.email || member.id));
+      membersDiv.appendChild(label);
+    });
+  modal.classList.remove('hidden');
+}
+
+document.getElementById('group-cancel').addEventListener('click', () => {
+  document.getElementById('group-modal').classList.add('hidden');
+});
+
+document.getElementById('group-create').addEventListener('click', async () => {
+  const name = document.getElementById('group-name').value.trim();
+  const selected = [...document.querySelectorAll('#group-members input:checked')].map(i => i.value);
+  if (!name || !selected.length) return;
+  await MessagingService.createChat(currentTeamId, { name, members: [currentUser.uid, ...selected] });
+  document.getElementById('group-modal').classList.add('hidden');
+  selectTeam(currentTeamId);
+});

@@ -34,11 +34,40 @@ class MessagingService {
     return { id: teamSnap.id, ...teamSnap.data() };
   }
 
+  async getTeamMembers(teamId) {
+    const team = await this.getTeam(teamId);
+    const ids = team.members || [];
+    const members = [];
+    for (const id of ids) {
+      const userSnap = await getDoc(doc(db, 'users', id));
+      if (userSnap.exists()) members.push({ id, ...userSnap.data() });
+    }
+    return members;
+  }
+
   async getTeamChats(teamId) {
     const chatsCol = collection(db, this.teamsCollection, teamId, 'chats');
     const q = query(chatsCol, orderBy('createdAt'));
     const snap = await getDocs(q);
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  }
+
+  async getOrCreateDirectChat(teamId, userId1, userId2) {
+    const chatsCol = collection(db, this.teamsCollection, teamId, 'chats');
+    const q = query(chatsCol, where('members', 'array-contains', userId1));
+    const snap = await getDocs(q);
+    let chat = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .find(c => c.members.length === 2 && c.members.includes(userId2));
+    if (chat) return chat;
+    const otherSnap = await getDoc(doc(db, 'users', userId2));
+    const otherName = otherSnap.exists() ? (otherSnap.data().displayName || otherSnap.data().email || 'Chat') : 'Chat';
+    const docRef = await addDoc(chatsCol, {
+      name: otherName,
+      members: [userId1, userId2],
+      createdAt: serverTimestamp()
+    });
+    return { id: docRef.id, name: otherName, members: [userId1, userId2] };
   }
 
   async createChat(teamId, { name, members }) {

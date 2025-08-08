@@ -23,6 +23,7 @@
           <ul id="chat-list"></ul>
         </div>
         <div class="chat-area">
+          <div id="chat-title" class="chat-header"></div>
           <div id="messages" class="messages"></div>
           <div id="typing-indicator" class="typing-indicator"></div>
           <form id="message-form" class="message-form">
@@ -32,6 +33,15 @@
         </div>
       </div>
     </main>
+  </div>
+  <div id="group-modal" class="modal hidden">
+    <div class="modal-content">
+      <h3>Create Group Chat</h3>
+      <input id="group-name" placeholder="Group name" />
+      <div id="group-members"></div>
+      <button id="group-create">Create</button>
+      <button id="group-cancel">Cancel</button>
+    </div>
   </div>
   <script type="module" src="/config/firebase-config.js"></script>
   <script type="module" src="/components/sidebar.js"></script>
