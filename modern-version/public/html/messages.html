@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Messages - NEPP</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <link rel="stylesheet" href="../css/messages.css" />
+  <link rel="icon" href="../images/logo.png" type="image/png">
+</head>
+<body>
+  <div class="nepp-root">
+    <aside class="sidebar"></aside>
+    <main class="main-content">
+      <h1 class="page-header">Messages</h1>
+      <div class="chat-container">
+        <div class="team-list">
+          <h2 class="list-header">Teams</h2>
+          <ul id="team-list"></ul>
+        </div>
+        <div class="chat-list">
+          <h2 class="list-header">Chats</h2>
+          <ul id="chat-list"></ul>
+        </div>
+        <div class="chat-area">
+          <div id="messages" class="messages"></div>
+          <div id="typing-indicator" class="typing-indicator"></div>
+          <form id="message-form" class="message-form">
+            <input id="message-input" placeholder="Type a message..." autocomplete="off" />
+            <button type="submit">Send</button>
+          </form>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="/config/firebase-config.js"></script>
+  <script type="module" src="/components/sidebar.js"></script>
+  <script type="module" src="/utils/navigation-utils.js"></script>
+  <script type="module" src="../js/messaging.js"></script>
+</body>
+</html>

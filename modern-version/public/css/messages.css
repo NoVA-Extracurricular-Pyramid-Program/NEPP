@@ -1,0 +1,104 @@
+.chat-container {
+  display: flex;
+  height: calc(100vh - 100px);
+  background: #101622;
+}
+.team-list, .chat-list {
+  width: 200px;
+  background: #101b28;
+  border-right: 1px solid #374151;
+  padding: 10px;
+  overflow-y: auto;
+}
+.chat-list {
+  border-right: 1px solid #374151;
+}
+.list-header {
+  color: #FFD600;
+  font-size: 1.2rem;
+  margin-bottom: 10px;
+}
+.team-list ul, .chat-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.team-list li, .chat-list li {
+  padding: 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  color: #fff;
+}
+.team-list li:hover, .chat-list li:hover, .team-list li.active, .chat-list li.active {
+  background: #07111d;
+  color: #FFD600;
+}
+.chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #16283c;
+}
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+.message {
+  margin-bottom: 8px;
+}
+.message.mine {
+  text-align: right;
+}
+.message .meta {
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+.message-actions button {
+  margin-left: 4px;
+}
+.message .reactions {
+  font-size: 0.8rem;
+  margin-top: 4px;
+}
+.read-receipt {
+  font-size: 0.7rem;
+  color: #9ca3af;
+}
+.typing-indicator {
+  height: 20px;
+  font-style: italic;
+  color: #FFD600;
+  padding: 4px 10px;
+}
+.message-form {
+  display: flex;
+  border-top: 1px solid #374151;
+}
+.message-form input {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  background: #101622;
+  color: #fff;
+}
+.message-form button {
+  padding: 10px 16px;
+  background: #FFD600;
+  border: none;
+  cursor: pointer;
+}
+.create-chat {
+  margin-top: 8px;
+  width: 100%;
+  background: #07111d;
+  color: #FFD600;
+  border: none;
+  padding: 6px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.create-chat:hover {
+  background: #FFD600;
+  color: #101b28;
+}
