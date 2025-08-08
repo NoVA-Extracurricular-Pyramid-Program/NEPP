@@ -149,6 +149,7 @@ body {
   font-size: 1.40rem;
   font-weight: 500;
   color: #fff;
+  text-decoration: none;
   cursor: pointer;
   border-radius: 20px;
   padding: 14px 15px;
@@ -176,6 +177,7 @@ body {
 .sidebar-item.active, .sidebar-item:hover {
   background: #07111d;
   color: #FFD600;
+  text-decoration: none;
 }
 .sidebar-user {
   margin-top: auto;
