@@ -54,6 +54,7 @@ body {
   width: 16px;
   height: 16px;
   color: #101b28;
+  transition: transform 0.3s ease;
 }
 
 /* Collapsed Sidebar Styles */
@@ -67,6 +68,11 @@ body {
 .sidebar-toggle.collapsed-state {
   left: 15px;
   background: #FFD600;
+}
+
+.sidebar.collapsed + * .sidebar-toggle .sidebar-toggle-icon,
+.sidebar-toggle.collapsed-state .sidebar-toggle-icon {
+  transform: rotate(180deg);
 }
 
 /* Main Content Adjustments */

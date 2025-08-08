@@ -18,10 +18,11 @@ class SidebarManager {
         try {
             const response = await fetch('/components/sidebar.html');
             const html = await response.text();
-            
+
             const sidebarContainer = document.querySelector('.sidebar');
             if (sidebarContainer) {
                 sidebarContainer.innerHTML = html;
+                this.initSidebarToggle();
             } else {
                 console.error('Sidebar container not found');
             }
@@ -134,6 +135,28 @@ class SidebarManager {
             if (hrefPage === currentPage) {
                 item.classList.add('active');
             }
+        });
+    }
+
+    initSidebarToggle() {
+        const mainContent = document.querySelector('.main-content');
+        const sidebar = document.querySelector('.sidebar');
+        if (!mainContent || !sidebar) return;
+
+        const toggleBtn = document.createElement('button');
+        toggleBtn.classList.add('sidebar-toggle');
+        toggleBtn.setAttribute('aria-label', 'Toggle sidebar');
+        toggleBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="sidebar-toggle-icon">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+        `;
+        mainContent.appendChild(toggleBtn);
+
+        toggleBtn.addEventListener('click', () => {
+            const isCollapsed = sidebar.classList.toggle('collapsed');
+            mainContent.classList.toggle('sidebar-collapsed', isCollapsed);
+            toggleBtn.classList.toggle('collapsed-state', isCollapsed);
         });
     }
 
