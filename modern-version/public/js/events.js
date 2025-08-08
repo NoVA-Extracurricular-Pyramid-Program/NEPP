@@ -41,9 +41,9 @@ class EventsManager {
         this.eventsCalendarView = document.getElementById('eventsCalendarView');
         this.eventsList = document.getElementById('eventsList');
         this.eventsCalendar = document.getElementById('eventsCalendar');
-        
+
         // Sidebar elements
-        this.miniCalendar = document.getElementById('miniCalendar');
+        this.eventsSidebar = document.querySelector('.events-sidebar');
         this.upcomingEventsList = document.getElementById('upcomingEventsList');
         
         // Modal elements
@@ -345,22 +345,12 @@ class EventsManager {
     initializeCalendar() {
         // Initialize the main calendar widget
         this.calendar = new CalendarWidget('eventsCalendar');
-        
+
         // Pass events data to calendar
         this.calendar.setEvents(this.events);
-        
+
         // Add event listener for date selection
         document.getElementById('eventsCalendar').addEventListener('dateSelected', (e) => {
-            this.handleDateSelection(e.detail.dateString, e.detail.date);
-        });
-        
-        // Initialize mini calendar
-        this.miniCalendar = new CalendarWidget('miniCalendar');
-        this.miniCalendar.setEvents(this.events);
-        this.miniCalendar.setMiniMode(true);
-        
-        // Add event listener for mini calendar date selection
-        document.getElementById('miniCalendar').addEventListener('dateSelected', (e) => {
             this.handleDateSelection(e.detail.dateString, e.detail.date);
         });
     }
@@ -522,9 +512,16 @@ class EventsManager {
         // Update view content
         this.eventsListView.classList.toggle('active', view === 'list');
         this.eventsCalendarView.classList.toggle('active', view === 'calendar');
-        
+
         if (view === 'calendar') {
+            if (this.eventsSidebar) {
+                this.eventsSidebar.style.display = 'none';
+            }
             this.renderCalendarView();
+        } else {
+            if (this.eventsSidebar) {
+                this.eventsSidebar.style.display = '';
+            }
         }
     }
 
@@ -635,19 +632,6 @@ class EventsManager {
                 </div>
             </div>
         `).join('');
-    }
-
-    renderMiniCalendar() {
-        // Simple mini calendar - you can enhance this
-        const now = new Date();
-        const monthName = now.toLocaleString('default', { month: 'long', year: 'numeric' });
-        
-        this.miniCalendar.innerHTML = `
-            <h3>${monthName}</h3>
-            <div style="text-align: center; color: var(--text-muted); font-size: 0.875rem;">
-                Click on calendar view for full calendar
-            </div>
-        `;
     }
 
     renderCalendarView() {
