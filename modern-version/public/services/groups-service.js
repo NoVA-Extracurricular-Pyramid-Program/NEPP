@@ -619,11 +619,11 @@ class GroupsService {
         
         const now = new Date();
         const diffTime = Math.abs(now - date);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
-        if (diffDays === 1) return 'Today';
-        if (diffDays === 2) return 'Yesterday';
-        if (diffDays <= 7) return `${diffDays - 1} days ago`;
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 0) return 'Today';
+        if (diffDays === 1) return 'Yesterday';
+        if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
         
         return date.toLocaleDateString();
     }
